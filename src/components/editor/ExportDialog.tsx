@@ -7,6 +7,7 @@ import { useEditor } from '@/editor/editorStore'
 import { exportJpeg } from '@/photo/exportJpeg'
 import { baseName, safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
+import { TouchSlider } from './TouchSlider'
 
 export function ExportDialog() {
   const photo = useEditor((s) => s.photo)
@@ -42,24 +43,17 @@ export function ExportDialog() {
             <DialogTitle>匯出照片</DialogTitle>
             <DialogDescription>以原始尺寸輸出 JPEG（sRGB）。</DialogDescription>
           </DialogHeader>
-          <div className="py-2">
-            <div className="flex justify-between text-xs">
-              <label htmlFor="export-quality" className="text-muted-foreground">
-                品質
-              </label>
-              <span className="tabular-nums">{quality}</span>
-            </div>
-            <input
-              id="export-quality"
-              type="range"
-              className="tone-range"
-              min={60}
-              max={100}
-              step={1}
-              value={quality}
-              onChange={(e) => setQuality(Number(e.target.value))}
-            />
-          </div>
+          <TouchSlider
+            value={quality}
+            min={60}
+            max={100}
+            step={1}
+            label="品質"
+            valueText={String(quality)}
+            onChange={setQuality}
+            onCommit={() => {}}
+            onReset={() => setQuality(92)}
+          />
           <DialogFooter>
             <Button disabled={busy} onClick={run}>
               {busy ? <Loader2 className="animate-spin" /> : <Download />}

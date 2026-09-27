@@ -1,6 +1,6 @@
-import type { CSSProperties } from 'react'
 import { ADJUSTMENT_RANGES, DEFAULT_ADJUSTMENTS, type AdjustmentKey } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
+import { TouchSlider } from './TouchSlider'
 
 interface Props {
   adjKey: AdjustmentKey
@@ -17,40 +17,29 @@ function formatValue(key: AdjustmentKey, value: number) {
   return min < 0 && value > 0 ? `+${text}` : text
 }
 
-// 雙擊可歸零；放開才提交，一次拖曳只算一步 undo
+// 接到編輯狀態的滑桿：雙擊歸零，放開才提交
 export function AdjustmentSlider({ adjKey, label, track }: Props) {
   const value = useEditor((s) => s.adjustments[adjKey])
   const setAdjustment = useEditor((s) => s.setAdjustment)
   const commit = useEditor((s) => s.commit)
   const { min, max, step } = ADJUSTMENT_RANGES[adjKey]
 
-  function reset() {
-    setAdjustment(adjKey, DEFAULT_ADJUSTMENTS[adjKey])
-    commit()
-  }
-
   return (
-    <div className="py-1.5" onDoubleClick={reset}>
-      <div className="flex items-center justify-between text-xs">
-        <label htmlFor={`adj-${adjKey}`} className="text-muted-foreground">
-          {label}
-        </label>
-        <span className="tabular-nums">{formatValue(adjKey, value)}</span>
-      </div>
-      <input
-        id={`adj-${adjKey}`}
-        type="range"
-        className="tone-range"
-        style={track ? ({ '--track': track } as CSSProperties) : undefined}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => setAdjustment(adjKey, Number(e.target.value))}
-        onPointerUp={commit}
-        onKeyUp={commit}
-        onBlur={commit}
-      />
-    </div>
+    <TouchSlider
+      id={`adj-${adjKey}`}
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      label={label}
+      valueText={formatValue(adjKey, value)}
+      track={track}
+      onChange={(v) => setAdjustment(adjKey, v)}
+      onCommit={commit}
+      onReset={() => {
+        setAdjustment(adjKey, DEFAULT_ADJUSTMENTS[adjKey])
+        commit()
+      }}
+    />
   )
 }

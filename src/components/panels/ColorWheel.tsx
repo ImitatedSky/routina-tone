@@ -35,7 +35,8 @@ export function ColorWheel({ hue, sat, onChange, onCommit, onReset, label, size 
   }
 
   return (
-    <div className="mx-auto w-full" style={{ maxWidth: size }}>
+    // 色輪會攔下所有觸控（二維拖曳分不出是不是要捲動），手機上縮小一點，兩側留空讓手指能捲動面板
+    <div className="mx-auto w-full pointer-coarse:max-w-56!" style={{ maxWidth: size }}>
       <div
         role="group"
         aria-label={label}

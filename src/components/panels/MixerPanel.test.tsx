@@ -13,13 +13,14 @@ describe('MixerPanel', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: '飽和度' }))
     expect(screen.getAllByRole('slider')).toHaveLength(8)
-    expect(screen.getByLabelText('洋紅色')).toHaveAttribute('id', 'adj-satMagenta')
+    expect(screen.getByRole('slider', { name: '洋紅色' })).toBeInTheDocument()
   })
 
   it('updates the store from a slider', () => {
     render(<MixerPanel />)
     fireEvent.click(screen.getByRole('tab', { name: '明度' }))
-    fireEvent.change(screen.getByLabelText('藍色'), { target: { value: '30' } })
-    expect(useEditor.getState().adjustments.lumBlue).toBe(30)
+    const slider = screen.getByRole('slider', { name: '藍色' })
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(slider, { key: 'ArrowRight' })
+    expect(useEditor.getState().adjustments.lumBlue).toBe(3)
   })
 })

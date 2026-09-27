@@ -86,7 +86,7 @@ export function CurvePanel() {
               aria-pressed={c === channel}
               onClick={() => selectChannel(c)}
               className={cn(
-                'flex h-7 min-w-10 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors',
+                'flex h-7 min-w-10 items-center pointer-coarse:h-9 justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors',
                 c === channel && 'bg-background text-foreground shadow-sm',
               )}
             >
@@ -101,7 +101,8 @@ export function CurvePanel() {
       </div>
 
       <div className="px-4 py-2">
-        <div className="mx-auto max-w-80">
+        {/* 曲線編輯器會攔下所有觸控，手機上兩側留空讓手指能捲動面板 */}
+        <div className="mx-auto max-w-80 pointer-coarse:max-w-64">
           <CurveEditor
             points={points}
             color={CHANNELS[channel].color}
