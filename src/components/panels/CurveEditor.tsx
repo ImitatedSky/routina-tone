@@ -1,5 +1,6 @@
 import { useRef, type MouseEvent, type PointerEvent } from 'react'
 import type { CurvePoint } from '@/engine/adjustments'
+import { useT } from '@/i18n/i18n'
 
 export interface GhostCurve {
   color: string
@@ -44,6 +45,7 @@ interface Drag {
 }
 
 export function CurveEditor({ points, color, curve, ghosts, selected, onSelect, onChange, onCommit }: Props) {
+  const t = useT()
   const drag = useRef<Drag | null>(null)
 
   // 螢幕座標轉成曲線座標，pxPerUnit 用來把螢幕距離換算成曲線單位
@@ -139,7 +141,7 @@ export function CurveEditor({ points, color, curve, ghosts, selected, onSelect, 
     <svg
       viewBox={`0 0 ${MAX} ${MAX}`}
       role="img"
-      aria-label="色調曲線編輯器：點一下新增控制點，拖曳調整，拖出框外或雙擊刪除"
+      aria-label={t.panels.curve.editorLabel}
       className="aspect-square w-full cursor-crosshair touch-none overflow-visible select-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

@@ -2,26 +2,12 @@ import { useState } from 'react'
 import { SliderSection, type SliderDef } from '@/components/editor/SliderSection'
 import { BANDS, DEFAULT_ADJUSTMENTS, type Band, type ScalarKey } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
+import { useT } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 
 type Property = 'hue' | 'sat' | 'lum'
 
-const PROPERTIES: { value: Property; label: string }[] = [
-  { value: 'hue', label: '色相' },
-  { value: 'sat', label: '飽和度' },
-  { value: 'lum', label: '明度' },
-]
-
-const BAND_LABELS: Record<Band, string> = {
-  red: '紅色',
-  orange: '橙色',
-  yellow: '黃色',
-  green: '綠色',
-  aqua: '水綠色',
-  blue: '藍色',
-  purple: '紫色',
-  magenta: '洋紅色',
-}
+const PROPERTIES: Property[] = ['hue', 'sat', 'lum']
 
 const BAND_COLORS: Record<Band, string> = {
   red: '#e5484d',
@@ -54,30 +40,31 @@ function keyOf(property: Property, band: Band) {
   return (property + band[0].toUpperCase() + band.slice(1)) as ScalarKey
 }
 
-// 每個顏色的三條滑桿：色相、飽和度、明度
-const SLIDERS = Object.fromEntries(
-  BANDS.map((band, i) => [
-    band,
-    PROPERTIES.map((p) => ({ key: keyOf(p.value, band), label: p.label, track: track(p.value, i) })),
-  ]),
-) as Record<Band, SliderDef[]>
-
 // Lightroom 混色器的「顏色」模式：先點選一個顏色，下面是它的色相／飽和度／明度
 export function MixerPanel() {
+  const t = useT()
   const [band, setBand] = useState<Band>('red')
   // 回傳字串而不是陣列：selector 每次回傳新陣列會讓 zustand 以為一直在變
   const adjusted = useEditor((s) =>
-    BANDS.filter((b) => PROPERTIES.some((p) => s.adjustments[keyOf(p.value, b)] !== DEFAULT_ADJUSTMENTS[keyOf(p.value, b)])).join(','),
+    BANDS.filter((b) => PROPERTIES.some((p) => s.adjustments[keyOf(p, b)] !== DEFAULT_ADJUSTMENTS[keyOf(p, b)])).join(','),
   ).split(',')
+
+  // 選中顏色的三條滑桿：色相、飽和度、明度
+  const bandIndex = BANDS.indexOf(band)
+  const sliders: SliderDef[] = PROPERTIES.map((p) => ({
+    key: keyOf(p, band),
+    label: t.panels.properties[p],
+    track: track(p, bandIndex),
+  }))
 
   return (
     <div>
-      <div className="grid grid-cols-8 gap-1.5 px-4 pt-3" role="group" aria-label="選擇顏色">
+      <div className="grid grid-cols-8 gap-1.5 px-4 pt-3" role="group" aria-label={t.panels.mixer.chooseColor}>
         {BANDS.map((b) => (
           <button
             key={b}
             type="button"
-            aria-label={BAND_LABELS[b]}
+            aria-label={t.panels.mixer.bands[b]}
             aria-pressed={b === band}
             onClick={() => setBand(b)}
             className={cn(
@@ -93,7 +80,7 @@ export function MixerPanel() {
           </button>
         ))}
       </div>
-      <SliderSection key={band} title={BAND_LABELS[band]} sliders={SLIDERS[band]} />
+      <SliderSection key={band} title={t.panels.mixer.bands[band]} sliders={sliders} />
     </div>
   )
 }

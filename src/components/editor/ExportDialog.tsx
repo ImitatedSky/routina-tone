@@ -7,9 +7,12 @@ import { useEditor } from '@/editor/editorStore'
 import { exportJpeg } from '@/photo/exportJpeg'
 import { baseName, safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
+import { useT } from '@/i18n/i18n'
 import { TouchSlider } from './TouchSlider'
 
 export function ExportDialog() {
+  const t = useT()
+  const labels = t.editor.export
   const photo = useEditor((s) => s.photo)
   const [open, setOpen] = useState(false)
   const [quality, setQuality] = useState(92)
@@ -22,10 +25,10 @@ export function ExportDialog() {
       const result = await exportJpeg(photo.file, useEditor.getState().adjustments, quality / 100)
       const saved = await saveFile(result.blob, `${safeFilename(baseName(photo.name))}-tone.jpg`, 'image')
       if (saved.status === 'cancelled') return
-      toast.success(`已匯出 ${result.width}×${result.height}`, { description: saved.message })
+      toast.success(labels.done(result.width, result.height), { description: saved.message })
       setOpen(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '匯出失敗')
+      toast.error(error instanceof Error ? error.message : labels.failed)
     } finally {
       setBusy(false)
     }
@@ -35,20 +38,20 @@ export function ExportDialog() {
     <>
       <Button size="sm" disabled={!photo} onClick={() => setOpen(true)}>
         <Download />
-        匯出
+        {labels.button}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>匯出照片</DialogTitle>
-            <DialogDescription>以原始尺寸輸出 JPEG（sRGB）。</DialogDescription>
+            <DialogTitle>{labels.title}</DialogTitle>
+            <DialogDescription>{labels.description}</DialogDescription>
           </DialogHeader>
           <TouchSlider
             value={quality}
             min={60}
             max={100}
             step={1}
-            label="品質"
+            label={labels.quality}
             valueText={String(quality)}
             onChange={setQuality}
             onCommit={() => {}}
@@ -57,7 +60,7 @@ export function ExportDialog() {
           <DialogFooter>
             <Button disabled={busy} onClick={run}>
               {busy ? <Loader2 className="animate-spin" /> : <Download />}
-              {busy ? '處理中…' : '匯出 JPEG'}
+              {busy ? labels.busy : labels.run}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { EditPanel } from '@/components/editor/EditPanel'
 import { EmptyState } from '@/components/editor/EmptyState'
@@ -7,11 +8,20 @@ import { useEditor } from '@/editor/editorStore'
 import { openPhotoFile } from '@/editor/openPhoto'
 import { useSessionPersistence } from '@/editor/useSessionPersistence'
 import { useShortcuts } from '@/editor/useShortcuts'
+import { useLanguage, useT } from '@/i18n/i18n'
 
 export function App() {
   const hasPhoto = useEditor((s) => s.photo !== null)
   const restoring = useSessionPersistence()
   useShortcuts()
+  const locale = useLanguage((s) => s.locale)
+  const title = useT().common.appTitle
+
+  // 讓瀏覽器、螢幕閱讀器知道目前的語言
+  useEffect(() => {
+    document.documentElement.lang = locale
+    document.title = title
+  }, [locale, title])
 
   return (
     <div

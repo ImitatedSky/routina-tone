@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { isDefault } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
+import { t, useT } from '@/i18n/i18n'
 import { safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
 import { PRESET_EXTENSION, parsePresetFile, serializePreset } from '@/presets/presetFile'
@@ -17,13 +18,14 @@ export function PresetPanel() {
   const importRef = useRef<HTMLInputElement>(null)
   const current = useEditor((s) => s.adjustments)
   const apply = useEditor((s) => s.apply)
+  const m = useT()
 
   async function refresh() {
     setPresets(await listPresets())
   }
 
   useEffect(() => {
-    listPresets().then(setPresets, () => toast.error('讀取預設集失敗'))
+    listPresets().then(setPresets, () => toast.error(t().presets.loadFailed))
   }, [])
 
   async function save() {
@@ -32,15 +34,15 @@ export function PresetPanel() {
     await addPreset(trimmed, current)
     setName('')
     await refresh()
-    toast.success(`已儲存「${trimmed}」`)
+    toast.success(m.presets.saved(trimmed))
   }
 
   async function remove(preset: Preset) {
     await deletePreset(preset.id)
     await refresh()
-    toast(`已刪除「${preset.name}」`, {
+    toast(m.presets.deleted(preset.name), {
       action: {
-        label: '復原',
+        label: m.presets.undo,
         onClick: () => void putPreset(preset).then(refresh),
       },
     })
@@ -52,7 +54,7 @@ export function PresetPanel() {
       const saved = await saveFile(blob, safeFilename(preset.name) + PRESET_EXTENSION, 'document')
       if (saved.status === 'saved' && saved.message) toast.success(saved.message)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '匯出失敗')
+      toast.error(error instanceof Error ? error.message : m.presets.exportFailed)
     }
   }
 
@@ -65,7 +67,9 @@ export function PresetPanel() {
           const { name: presetName, adjustments, warnings } = parseXmpPreset(text, file.name)
           await addPreset(presetName, adjustments)
           if (warnings.length > 0) {
-            toast.warning(`「${presetName}」有部分內容無法套用`, { description: warnings.join('、') })
+            toast.warning(m.presets.partiallyApplied(presetName), {
+              description: warnings.join(m.presets.listSeparator),
+            })
           }
         } else {
           const { name: presetName, adjustments } = parsePresetFile(text)
@@ -73,12 +77,12 @@ export function PresetPanel() {
         }
         imported++
       } catch (error) {
-        toast.error(`${file.name}：${error instanceof Error ? error.message : '無法匯入'}`)
+        toast.error(m.presets.importFileError(file.name, error instanceof Error ? error.message : m.presets.importFailed))
       }
     }
     if (imported > 0) {
       await refresh()
-      toast.success(`已匯入 ${imported} 個預設集`)
+      toast.success(m.presets.imported(imported))
     }
   }
 
@@ -91,16 +95,16 @@ export function PresetPanel() {
           void save()
         }}
       >
-        <Input placeholder="為目前設定命名" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input placeholder={m.presets.namePlaceholder} value={name} onChange={(e) => setName(e.target.value)} />
         <Button type="submit" size="default" disabled={!name.trim() || isDefault(current)}>
           <Plus />
-          儲存
+          {m.common.save}
         </Button>
       </form>
 
       <Button variant="outline" size="sm" className="w-full" onClick={() => importRef.current?.click()}>
         <FileUp />
-        匯入預設集（.tone.json 或 Lightroom .xmp）
+        {m.presets.importButton}
       </Button>
       <input
         ref={importRef}
@@ -115,7 +119,7 @@ export function PresetPanel() {
       />
 
       {presets.length === 0 ? (
-        <p className="py-4 text-center text-xs text-muted-foreground">還沒有預設集。調好之後在上面命名儲存。</p>
+        <p className="py-4 text-center text-xs text-muted-foreground">{m.presets.empty}</p>
       ) : (
         <ul className="divide-y rounded-lg border">
           {presets.map((preset) => (
@@ -127,10 +131,10 @@ export function PresetPanel() {
               >
                 {preset.name}
               </button>
-              <Button variant="ghost" size="icon-sm" aria-label={`匯出「${preset.name}」`} onClick={() => void exportOne(preset)}>
+              <Button variant="ghost" size="icon-sm" aria-label={m.presets.exportPreset(preset.name)} onClick={() => void exportOne(preset)}>
                 <Download />
               </Button>
-              <Button variant="ghost" size="icon-sm" aria-label={`刪除「${preset.name}」`} onClick={() => void remove(preset)}>
+              <Button variant="ghost" size="icon-sm" aria-label={m.presets.deletePreset(preset.name)} onClick={() => void remove(preset)}>
                 <Trash2 />
               </Button>
             </li>

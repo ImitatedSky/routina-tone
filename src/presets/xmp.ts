@@ -8,6 +8,7 @@ import {
   type CurvePoint,
   type ScalarKey,
 } from '@/engine/adjustments'
+import { t } from '@/i18n/i18n'
 
 // 匯入 Lightroom / Camera Raw 的 .xmp 預設集
 
@@ -175,11 +176,11 @@ function fileBaseName(fileName: string): string {
 export function parseXmpPreset(text: string, fileName: string): XmpImport {
   const doc = new DOMParser().parseFromString(text, 'application/xml')
   if (doc.getElementsByTagName('parsererror').length > 0) {
-    throw new XmpError('檔案不是有效的 XML')
+    throw new XmpError(t().presets.invalidXml)
   }
   const settings = readCrsSettings(doc)
   if (settings.values.size === 0 && settings.complex.size === 0) {
-    throw new XmpError('這不是 Lightroom 的 .xmp 預設集')
+    throw new XmpError(t().presets.notXmpPreset)
   }
   const { values, complex } = settings
   const warnings = new Set<string>()
@@ -208,33 +209,33 @@ export function parseXmpPreset(text: string, fileName: string): XmpImport {
   // 白平衡：只有相對值（Incremental*）能套在 JPEG 上
   const hasIncrementalWb = values.has('IncrementalTemperature') || values.has('IncrementalTint')
   if (!hasIncrementalWb && (values.has('Temperature') || values.has('Tint'))) {
-    warnings.add('絕對白平衡（色溫 K 值）只適用 RAW 檔，無法套用在 JPEG 上，已忽略')
+    warnings.add(t().presets.xmpAbsoluteWhiteBalance)
   }
 
   if (values.get('ConvertToGrayscale')?.toLowerCase() === 'true') {
     raw.saturation = -100
     const hasGrayMix = [...values.keys()].some((k) => k.startsWith('GrayMixer') && readNumber(values, k))
-    if (hasGrayMix) warnings.add('黑白混色（各色明暗）尚未支援，改用完全去飽和')
+    if (hasGrayMix) warnings.add(t().presets.xmpGrayMixer)
   }
 
   if (complex.has('Look') || values.has('RGBTable') || [...values.keys()].some((k) => k.startsWith('Table_'))) {
-    warnings.add('Lightroom 的描述檔（Look）無法套用')
+    warnings.add(t().presets.xmpLook)
   }
 
   const profile = values.get('CameraProfile') ?? ''
   if (profile !== '' && profile !== 'Adobe Standard') {
-    warnings.add(`相機描述檔「${profile}」無法套用，改用標準色彩`)
+    warnings.add(t().presets.xmpCameraProfile(profile))
   }
 
   const hasMasks = MASK_KEYS.some((k) => {
     const el = complex.get(k)
     return (el !== undefined && listItems(el).length > 0) || (values.get(k) ?? '') !== ''
   })
-  if (hasMasks) warnings.add('遮罩與局部調整尚未支援')
+  if (hasMasks) warnings.add(t().presets.xmpMasks)
 
-  if (values.get('HasCrop')?.toLowerCase() === 'true') warnings.add('裁切設定已忽略')
-  if (values.get('LensProfileEnable') === '1') warnings.add('鏡頭描述檔校正已忽略')
+  if (values.get('HasCrop')?.toLowerCase() === 'true') warnings.add(t().presets.xmpCrop)
+  if (values.get('LensProfileEnable') === '1') warnings.add(t().presets.xmpLensProfile)
 
-  const name = readName(settings) || fileBaseName(fileName) || '未命名'
+  const name = readName(settings) || fileBaseName(fileName) || t().presets.untitled
   return { name, adjustments: normalizeAdjustments(raw), warnings: [...warnings] }
 }

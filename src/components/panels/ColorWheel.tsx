@@ -1,4 +1,5 @@
 import type { PointerEvent } from 'react'
+import { useT } from '@/i18n/i18n'
 import { WHEEL_BACKGROUND, hueSatToPoint, pointToHueSat, tintColor } from './wheelMath'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 
 // 拖曳色輪任何地方都能選色相與飽和度；雙擊重設
 export function ColorWheel({ hue, sat, onChange, onCommit, onReset, label, size = 240 }: Props) {
+  const t = useT()
   const handle = hueSatToPoint(hue, sat)
 
   function update(e: PointerEvent<HTMLDivElement>) {
@@ -58,8 +60,8 @@ export function ColorWheel({ hue, sat, onChange, onCommit, onReset, label, size 
         />
       </div>
       <div className="mt-2 flex justify-center gap-4 text-xs text-muted-foreground tabular-nums">
-        <span>色相 {Math.round(hue)}°</span>
-        <span>飽和度 {Math.round(sat)}</span>
+        <span>{t.panels.wheel.hue(Math.round(hue))}</span>
+        <span>{t.panels.wheel.sat(Math.round(sat))}</span>
       </div>
     </div>
   )

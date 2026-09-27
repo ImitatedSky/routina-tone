@@ -1,4 +1,5 @@
 import { DEFAULT_ADJUSTMENTS } from '@/engine/adjustments'
+import { useLanguage } from '@/i18n/i18n'
 import { parsePresetFile, serializePreset, PresetFileError } from './presetFile'
 
 describe('preset file', () => {
@@ -33,5 +34,12 @@ describe('preset file', () => {
   it('rejects presets from a newer version', () => {
     const text = JSON.stringify({ format: 'routina-tone-preset', version: 99, name: 'x', adjustments: {} })
     expect(() => parsePresetFile(text)).toThrow('較新版本')
+  })
+
+  it('reports errors in English and names untitled presets in English', () => {
+    useLanguage.getState().setPref('en')
+    expect(() => parsePresetFile('{"hello":1}')).toThrow('This is not a Routina Tone preset file')
+    const text = JSON.stringify({ format: 'routina-tone-preset', version: 1, name: ' ', adjustments: {} })
+    expect(parsePresetFile(text).name).toBe('Untitled')
   })
 })

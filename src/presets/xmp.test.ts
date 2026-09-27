@@ -1,4 +1,5 @@
 import { DEFAULT_ADJUSTMENTS } from '@/engine/adjustments'
+import { useLanguage } from '@/i18n/i18n'
 import { parseXmpPreset, XmpError } from './xmp'
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
@@ -315,5 +316,15 @@ describe('parseXmpPreset', () => {
       <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Photo</rdf:li></rdf:Alt></dc:title>
     </rdf:Description>`)
     expect(() => parseXmpPreset(text, 'a.xmp')).toThrow('這不是 Lightroom 的 .xmp 預設集')
+  })
+
+  it('writes warnings in English when the UI is English', () => {
+    useLanguage.getState().setPref('en')
+    const text = wrap(`<rdf:Description rdf:about="" xmlns:crs="${CRS}"
+      crs:CameraProfile="Camera Standard" crs:HasCrop="True"/>`)
+    expect(parseXmpPreset(text, 'x.xmp').warnings).toEqual([
+      'Camera profile "Camera Standard" can\'t be applied; using standard color',
+      'Crop settings were ignored',
+    ])
   })
 })

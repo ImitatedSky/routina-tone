@@ -6,24 +6,13 @@ import { AdjustmentSlider } from '@/components/editor/AdjustmentSlider'
 import { SliderSection, type SliderDef } from '@/components/editor/SliderSection'
 import { DEFAULT_ADJUSTMENTS, GRADE_RANGES, type GradeRange, type ScalarKey } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
+import { useT } from '@/i18n/i18n'
 import { ColorWheel } from './ColorWheel'
 import { tintColor } from './wheelMath'
-
-const RANGE_LABELS: Record<GradeRange, string> = {
-  shadow: '陰影',
-  midtone: '中間調',
-  highlight: '亮部',
-  global: '全局',
-}
 
 function gradeKey(range: GradeRange, prop: 'Hue' | 'Sat' | 'Lum') {
   return `grade${range[0].toUpperCase() + range.slice(1)}${prop}` as ScalarKey
 }
-
-const BLEND_SLIDERS: SliderDef[] = [
-  { key: 'gradeBlending', label: '混合' },
-  { key: 'gradeBalance', label: '平衡' },
-]
 
 const LUM_TRACK = 'linear-gradient(to right, #1a1a1a, #e6e6e6)'
 
@@ -42,6 +31,8 @@ function RangeSwatch({ range }: { range: GradeRange }) {
 
 // Lightroom 的色彩分級：陰影／中間調／亮部／全局各有一個色輪和明度
 export function GradingPanel() {
+  const t = useT()
+  const text = t.panels.grading
   const [range, setRange] = useState<GradeRange>('shadow')
   const hueKey = gradeKey(range, 'Hue')
   const satKey = gradeKey(range, 'Sat')
@@ -72,7 +63,11 @@ export function GradingPanel() {
     apply(next)
   }
 
-  const label = RANGE_LABELS[range]
+  const label = text.ranges[range]
+  const blendSliders: SliderDef[] = [
+    { key: 'gradeBlending', label: text.blending },
+    { key: 'gradeBalance', label: text.balance },
+  ]
 
   return (
     <div>
@@ -81,7 +76,7 @@ export function GradingPanel() {
           {GRADE_RANGES.map((r) => (
             <TabsTrigger key={r} value={r}>
               <RangeSwatch range={r} />
-              {RANGE_LABELS[r]}
+              {text.ranges[r]}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -90,12 +85,18 @@ export function GradingPanel() {
       <section className="px-4 py-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">{label}</h2>
-          <Button variant="ghost" size="icon-sm" aria-label={`重設${label}`} disabled={!isChanged} onClick={resetRange}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t.common.resetSection(label)}
+            disabled={!isChanged}
+            onClick={resetRange}
+          >
             <RotateCcw />
           </Button>
         </div>
         <ColorWheel
-          label={`${label}色輪`}
+          label={text.wheel(label)}
           hue={hue}
           sat={sat}
           size={280}
@@ -103,10 +104,10 @@ export function GradingPanel() {
           onCommit={commit}
           onReset={resetWheel}
         />
-        <AdjustmentSlider key={lumKey} adjKey={lumKey} label="明度" track={LUM_TRACK} />
+        <AdjustmentSlider key={lumKey} adjKey={lumKey} label={t.panels.properties.lum} track={LUM_TRACK} />
       </section>
 
-      <SliderSection title="混合與平衡" sliders={BLEND_SLIDERS} />
+      <SliderSection title={text.blendBalance} sliders={blendSliders} />
     </div>
   )
 }

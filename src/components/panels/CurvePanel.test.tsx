@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { DEFAULT_ADJUSTMENTS } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
+import { useLanguage } from '@/i18n/i18n'
 import { CurvePanel } from './CurvePanel'
 
 // jsdom 沒有排版，給編輯器一個 255px 見方的位置，螢幕座標剛好等於曲線座標（y 反過來）
@@ -25,6 +26,15 @@ describe('CurvePanel', () => {
     expect(screen.getByRole('button', { name: /RGB/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('陰影')).toBeInTheDocument()
     expect(screen.getByLabelText('亮部分界')).toBeInTheDocument()
+  })
+
+  it('renders English labels', () => {
+    useLanguage.getState().setPref('en')
+    render(<CurvePanel />)
+    expect(screen.getByRole('button', { name: /Red/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('Shadows')).toBeInTheDocument()
+    expect(screen.getByLabelText('Highlight split')).toBeInTheDocument()
+    expect(screen.getByText('Click the curve to add a point')).toBeInTheDocument()
   })
 
   it('switches channel', () => {

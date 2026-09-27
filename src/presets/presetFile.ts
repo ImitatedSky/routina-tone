@@ -1,4 +1,5 @@
 import { diffFromDefaults, normalizeAdjustments, type Adjustments, type AdjustmentsPatch } from '@/engine/adjustments'
+import { t } from '@/i18n/i18n'
 
 export const PRESET_FORMAT = 'routina-tone-preset'
 export const PRESET_VERSION = 1
@@ -32,15 +33,15 @@ export function parsePresetFile(text: string): { name: string; adjustments: Adju
   try {
     data = JSON.parse(text)
   } catch {
-    throw new PresetFileError('檔案不是有效的 JSON')
+    throw new PresetFileError(t().presets.invalidJson)
   }
   if (typeof data !== 'object' || data === null || (data as PresetFile).format !== PRESET_FORMAT) {
-    throw new PresetFileError('這不是 Routina Tone 的預設集檔案')
+    throw new PresetFileError(t().presets.notPresetFile)
   }
   const file = data as PresetFile
   if (typeof file.version !== 'number' || file.version > PRESET_VERSION) {
-    throw new PresetFileError('這個預設集來自較新版本的 Routina Tone，請先更新 App')
+    throw new PresetFileError(t().presets.newerVersion)
   }
-  const name = typeof file.name === 'string' && file.name.trim() ? file.name.trim() : '未命名'
+  const name = typeof file.name === 'string' && file.name.trim() ? file.name.trim() : t().presets.untitled
   return { name, adjustments: normalizeAdjustments(file.adjustments) }
 }

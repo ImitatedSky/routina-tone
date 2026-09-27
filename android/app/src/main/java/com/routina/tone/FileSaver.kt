@@ -17,7 +17,8 @@ import org.json.JSONObject
 /**
  * 替網頁存檔。網頁端呼叫 `RoutinaToneFiles.saveFile(...)`，結果非同步回呼
  * `window.__toneSaveResult(id, status, message)`，status 是 saved / cancelled / error。
- * 對應的網頁程式在 src/lib/saveFile.ts。
+ * message 是和語言無關的代碼（saved：gallery / document；error：decode / gallery / dialog / write，
+ * 後面可接「:例外訊息」），由網頁依介面語言換成文字。對應的網頁程式在 src/lib/saveFile.ts。
  *
  * - 照片（kind = "image"）在 Android 10 以上直接寫進相簿的 Pictures/Routina Tone，
  *   App 自己新增的媒體檔不需要任何權限。
@@ -42,8 +43,8 @@ class FileSaver(private val activity: ComponentActivity, private val webView: We
         }
         Thread {
             runCatching { write(uri, request.bytes) }
-                .onSuccess { report(request.id, STATUS_SAVED, "已儲存") }
-                .onFailure { report(request.id, STATUS_ERROR, "儲存失敗：${it.message}") }
+                .onSuccess { report(request.id, STATUS_SAVED, "document") }
+                .onFailure { report(request.id, STATUS_ERROR, detail("write", it)) }
         }.start()
     }
 
@@ -54,13 +55,13 @@ class FileSaver(private val activity: ComponentActivity, private val webView: We
         @JavascriptInterface
         fun saveFile(id: String, base64: String, filename: String, mimeType: String, kind: String) {
             val bytes = runCatching { Base64.decode(base64, Base64.DEFAULT) }.getOrElse {
-                report(id, STATUS_ERROR, "檔案內容無法解讀")
+                report(id, STATUS_ERROR, "decode")
                 return
             }
             if (kind == KIND_IMAGE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 runCatching { saveToGallery(bytes, filename, mimeType) }
-                    .onSuccess { report(id, STATUS_SAVED, "已存到相簿 $GALLERY_DIR") }
-                    .onFailure { report(id, STATUS_ERROR, "存到相簿失敗：${it.message}") }
+                    .onSuccess { report(id, STATUS_SAVED, "gallery") }
+                    .onFailure { report(id, STATUS_ERROR, detail("gallery", it)) }
             } else {
                 activity.runOnUiThread { askWhereToSave(Pending(id, bytes), filename, mimeType) }
             }
@@ -77,7 +78,7 @@ class FileSaver(private val activity: ComponentActivity, private val webView: We
         }
         runCatching { createDocument.launch(intent) }.onFailure {
             pending = null
-            report(request.id, STATUS_ERROR, "無法開啟另存新檔")
+            report(request.id, STATUS_ERROR, "dialog")
         }
     }
 
@@ -91,7 +92,7 @@ class FileSaver(private val activity: ComponentActivity, private val webView: We
             put(MediaStore.Images.Media.IS_PENDING, 1)
         }
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-            ?: error("無法建立檔案")
+            ?: error("insert returned null")
         try {
             write(uri, bytes)
             values.clear()
@@ -104,9 +105,12 @@ class FileSaver(private val activity: ComponentActivity, private val webView: We
     }
 
     private fun write(uri: Uri, bytes: ByteArray) {
-        val stream = activity.contentResolver.openOutputStream(uri) ?: error("無法寫入檔案")
+        val stream = activity.contentResolver.openOutputStream(uri) ?: error("openOutputStream returned null")
         stream.use { it.write(bytes) }
     }
+
+    private fun detail(code: String, error: Throwable) =
+        error.message?.let { "$code:$it" } ?: code
 
     private fun report(id: String, status: String, message: String) {
         val js = "window.__toneSaveResult && window.__toneSaveResult(" +

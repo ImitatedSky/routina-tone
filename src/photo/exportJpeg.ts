@@ -1,5 +1,6 @@
 import type { Adjustments } from '@/engine/adjustments'
 import { Renderer, tileMargin } from '@/engine/renderer'
+import { t } from '@/i18n/i18n'
 import { PREVIEW_MAX_EDGE, decodeImage, resizeImage } from './decode'
 
 export interface ExportResult {
@@ -42,7 +43,7 @@ export async function exportJpeg(
     output.width = image.width
     output.height = image.height
     const ctx = output.getContext('2d')
-    if (!ctx) throw new Error('無法建立輸出畫布，照片可能太大')
+    if (!ctx) throw new Error(t().photo.outputCanvasFailed)
 
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < columns; col++) {
@@ -69,7 +70,7 @@ export async function exportJpeg(
     }
 
     const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/jpeg', quality))
-    if (!blob) throw new Error('JPEG 編碼失敗')
+    if (!blob) throw new Error(t().photo.jpegEncodeFailed)
     return { blob, width: image.width, height: image.height }
   } finally {
     full.close()

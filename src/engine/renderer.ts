@@ -1,4 +1,5 @@
 import * as twgl from 'twgl.js'
+import { t } from '@/i18n/i18n'
 import type { Adjustments } from './adjustments'
 import { buildCurveLut } from './curves'
 import { gradingUniforms, mixerUniforms } from './grading'
@@ -89,7 +90,7 @@ export class Renderer {
       antialias: false,
       preserveDrawingBuffer: options.preserveDrawingBuffer ?? false,
     })
-    if (!gl) throw new RendererError('這個瀏覽器不支援 WebGL2，無法調色')
+    if (!gl) throw new RendererError(t().photo.noWebgl2)
     this.gl = gl
     this.develop = twgl.createProgramInfo(gl, [VERTEX_SHADER, DEVELOP_SHADER])
     this.lumaDown = twgl.createProgramInfo(gl, [VERTEX_SHADER, LUMA_DOWN_SHADER])
@@ -181,7 +182,7 @@ export class Renderer {
     this.canvas.height = bitmap.height
     // 瀏覽器可能因為記憶體限制悄悄縮小繪圖緩衝區，這時畫出來的不是原尺寸
     if (gl.drawingBufferWidth !== bitmap.width || gl.drawingBufferHeight !== bitmap.height) {
-      throw new RendererError(`圖片太大（${bitmap.width}×${bitmap.height}），瀏覽器無法處理`)
+      throw new RendererError(t().photo.imageTooLarge(bitmap.width, bitmap.height))
     }
   }
 

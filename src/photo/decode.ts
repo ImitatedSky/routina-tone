@@ -1,3 +1,4 @@
+import { t } from '@/i18n/i18n'
 import { heicToDecodable, isHeic } from './heic'
 
 export class DecodeError extends Error {}
@@ -11,13 +12,13 @@ export async function decodeImage(blob: Blob): Promise<ImageBitmap> {
   try {
     return await createImageBitmap(blob, { imageOrientation: 'from-image' })
   } catch {
-    if (!(await isHeic(blob))) throw new DecodeError('無法讀取這張照片，請使用 JPEG、PNG、WebP 或 HEIC')
+    if (!(await isHeic(blob))) throw new DecodeError(t().photo.unsupportedFormat)
   }
   let converted: Blob
   try {
     converted = await heicToDecodable(blob)
   } catch (error) {
-    throw new DecodeError(error instanceof Error ? error.message : '無法讀取這張 HEIC 照片')
+    throw new DecodeError(error instanceof Error ? error.message : t().photo.heicFailed)
   }
   // libheif 已經轉正過，輸出的 JPEG 沒有 EXIF，不會轉兩次
   return createImageBitmap(converted, { imageOrientation: 'from-image' })

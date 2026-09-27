@@ -1,3 +1,5 @@
+import { t } from '@/i18n/i18n'
+
 // libheif-js 的 HeifDecoder / HeifImage 包裝層沒有型別，這裡只宣告用到的部分
 interface HeifImage {
   get_width(): number
@@ -56,7 +58,7 @@ export async function heicToDecodable(blob: Blob): Promise<Blob> {
       if (decoder.decoder) libheif.heif_context_free(decoder.decoder)
     }
   } catch {
-    throw new Error('無法讀取這張 HEIC 照片')
+    throw new Error(t().photo.heicFailed)
   }
 }
 

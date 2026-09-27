@@ -3,12 +3,14 @@ import { toast } from 'sonner'
 import { DEFAULT_ADJUSTMENTS } from '@/engine/adjustments'
 import { Renderer, supportsWebGL2 } from '@/engine/renderer'
 import { useEditor, useView } from '@/editor/editorStore'
+import { useT } from '@/i18n/i18n'
 import { Histogram } from './Histogram'
 
 // 直方圖不必每一格拖曳都更新，太頻繁反而拖慢手機
 const HISTOGRAM_INTERVAL = 120
 
 export function PhotoCanvas() {
+  const t = useT()
   const containerRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<Renderer | null>(null)
   const lastHistogramRef = useRef(0)
@@ -86,12 +88,12 @@ export function PhotoCanvas() {
       {showHistogram && <Histogram className="pointer-events-none absolute top-3 right-3" />}
       {showOriginal && (
         <span className="pointer-events-none absolute top-4 left-4 rounded-md bg-black/60 px-2 py-0.5 text-xs text-white">
-          原圖
+          {t.editor.canvas.original}
         </span>
       )}
       {!supported && (
         <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-sm text-destructive">
-          這個瀏覽器不支援 WebGL2，無法調色
+          {t.editor.canvas.noWebgl}
         </p>
       )}
     </div>

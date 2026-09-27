@@ -4,35 +4,39 @@ import { SliderSection, type SliderDef } from '@/components/editor/SliderSection
 import { CURVE_CHANNELS, DEFAULT_CURVE, isIdentityCurve, type CurveChannel } from '@/engine/adjustments'
 import { parametricCurve, pointCurve } from '@/engine/curves'
 import { useEditor } from '@/editor/editorStore'
+import { useT } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { CurveEditor, type GhostCurve } from './CurveEditor'
 
-const CHANNELS: Record<CurveChannel, { label: string; color: string }> = {
-  rgb: { label: 'RGB', color: 'oklch(0.93 0 0)' },
-  red: { label: '紅', color: 'oklch(0.68 0.2 25)' },
-  green: { label: '綠', color: 'oklch(0.75 0.17 145)' },
-  blue: { label: '藍', color: 'oklch(0.68 0.16 255)' },
+const CHANNEL_COLORS: Record<CurveChannel, string> = {
+  rgb: 'oklch(0.93 0 0)',
+  red: 'oklch(0.68 0.2 25)',
+  green: 'oklch(0.75 0.17 145)',
+  blue: 'oklch(0.68 0.16 255)',
 }
 
-const REGION_SLIDERS: SliderDef[] = [
-  { key: 'curveHighlights', label: '亮部' },
-  { key: 'curveLights', label: '亮調' },
-  { key: 'curveDarks', label: '暗調' },
-  { key: 'curveShadows', label: '陰影' },
-]
-
-const SPLIT_SLIDERS: SliderDef[] = [
-  { key: 'curveShadowSplit', label: '陰影分界' },
-  { key: 'curveMidtoneSplit', label: '中間分界' },
-  { key: 'curveHighlightSplit', label: '亮部分界' },
-]
+const REGION_KEYS = ['curveHighlights', 'curveLights', 'curveDarks', 'curveShadows'] as const
 
 export function CurvePanel() {
+  const t = useT()
+  const text = t.panels.curve
   const [channel, setChannel] = useState<CurveChannel>('rgb')
   const [selected, setSelected] = useState<number | null>(null)
   const adjustments = useEditor((s) => s.adjustments)
   const setCurve = useEditor((s) => s.setCurve)
   const commit = useEditor((s) => s.commit)
+
+  const regionSliders: SliderDef[] = [
+    { key: 'curveHighlights', label: text.regions.highlights },
+    { key: 'curveLights', label: text.regions.lights },
+    { key: 'curveDarks', label: text.regions.darks },
+    { key: 'curveShadows', label: text.regions.shadows },
+  ]
+  const splitSliders: SliderDef[] = [
+    { key: 'curveShadowSplit', label: text.splitPoints.shadow },
+    { key: 'curveMidtoneSplit', label: text.splitPoints.midtone },
+    { key: 'curveHighlightSplit', label: text.splitPoints.highlight },
+  ]
 
   const points = adjustments.curve[channel]
   // undo 之後點的數量可能變了
@@ -44,16 +48,16 @@ export function CurvePanel() {
   const rgb = pointCurve(adjustments.curve.rgb)
   const masterCurve = (x: number) => rgb(parametric(x / 255) * 255)
   const masterChanged =
-    !isIdentityCurve(adjustments.curve.rgb) || REGION_SLIDERS.some(({ key }) => adjustments[key] !== 0)
+    !isIdentityCurve(adjustments.curve.rgb) || REGION_KEYS.some((key) => adjustments[key] !== 0)
 
   const curve = channel === 'rgb' ? masterCurve : pointCurve(points)
   const ghosts: GhostCurve[] = []
   for (const c of CURVE_CHANNELS) {
     if (c === channel) continue
     if (c === 'rgb') {
-      if (masterChanged) ghosts.push({ color: CHANNELS.rgb.color, curve: masterCurve })
+      if (masterChanged) ghosts.push({ color: CHANNEL_COLORS.rgb, curve: masterCurve })
     } else if (!isIdentityCurve(adjustments.curve[c])) {
-      ghosts.push({ color: CHANNELS[c].color, curve: pointCurve(adjustments.curve[c]) })
+      ghosts.push({ color: CHANNEL_COLORS[c], curve: pointCurve(adjustments.curve[c]) })
     }
   }
 
@@ -78,7 +82,7 @@ export function CurvePanel() {
   return (
     <div className="pt-2">
       <div className="flex items-center justify-between gap-2 px-4 py-2">
-        <div className="flex rounded-lg bg-muted p-0.5" role="group" aria-label="曲線頻道">
+        <div className="flex rounded-lg bg-muted p-0.5" role="group" aria-label={text.channelsLabel}>
           {CURVE_CHANNELS.map((c) => (
             <button
               key={c}
@@ -90,13 +94,13 @@ export function CurvePanel() {
                 c === channel && 'bg-background text-foreground shadow-sm',
               )}
             >
-              <span className="size-2 rounded-full" style={{ background: CHANNELS[c].color }} />
-              {CHANNELS[c].label}
+              <span className="size-2 rounded-full" style={{ background: CHANNEL_COLORS[c] }} />
+              {text.channels[c]}
             </button>
           ))}
         </div>
         <Button variant="ghost" size="sm" disabled={isIdentityCurve(points)} onClick={reset}>
-          重設
+          {t.common.reset}
         </Button>
       </div>
 
@@ -105,7 +109,7 @@ export function CurvePanel() {
         <div className="mx-auto max-w-80 pointer-coarse:max-w-64">
           <CurveEditor
             points={points}
-            color={CHANNELS[channel].color}
+            color={CHANNEL_COLORS[channel]}
             curve={curve}
             ghosts={ghosts}
             selected={selectedPoint ? selected : null}
@@ -118,21 +122,21 @@ export function CurvePanel() {
           {selectedPoint ? (
             <>
               <span className="text-muted-foreground tabular-nums">
-                輸入 <span className="text-foreground">{selectedPoint[0]}</span> → 輸出{' '}
+                {text.input} <span className="text-foreground">{selectedPoint[0]}</span> → {text.output}{' '}
                 <span className="text-foreground">{selectedPoint[1]}</span>
               </span>
               <Button variant="ghost" size="xs" disabled={isEndpoint} onClick={removeSelected}>
-                刪除
+                {t.common.delete}
               </Button>
             </>
           ) : (
-            <span className="text-muted-foreground">點一下曲線新增控制點</span>
+            <span className="text-muted-foreground">{text.addPointHint}</span>
           )}
         </div>
       </div>
 
-      <SliderSection title="區域" sliders={REGION_SLIDERS} />
-      <SliderSection title="分界點" sliders={SPLIT_SLIDERS} />
+      <SliderSection title={text.region} sliders={regionSliders} />
+      <SliderSection title={text.splits} sliders={splitSliders} />
     </div>
   )
 }
