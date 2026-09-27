@@ -6,20 +6,20 @@ import { MixerPanel } from './MixerPanel'
 beforeEach(() => useEditor.setState({ adjustments: DEFAULT_ADJUSTMENTS, committed: DEFAULT_ADJUSTMENTS }))
 
 describe('MixerPanel', () => {
-  it('shows eight hue sliders and switches to saturation', () => {
+  it('shows hue, saturation and luminance for the selected color', () => {
     render(<MixerPanel />)
-    expect(screen.getAllByRole('slider')).toHaveLength(8)
-    expect(screen.getByLabelText('紅色')).toHaveAttribute('id', 'adj-hueRed')
+    expect(screen.getAllByRole('slider')).toHaveLength(3)
+    expect(screen.getByRole('slider', { name: '色相' })).toHaveAttribute('id', 'adj-hueRed')
 
-    fireEvent.click(screen.getByRole('tab', { name: '飽和度' }))
-    expect(screen.getAllByRole('slider')).toHaveLength(8)
-    expect(screen.getByRole('slider', { name: '洋紅色' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '洋紅色' }))
+    expect(screen.getByRole('button', { name: '洋紅色' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('slider', { name: '飽和度' })).toHaveAttribute('id', 'adj-satMagenta')
   })
 
   it('updates the store from a slider', () => {
     render(<MixerPanel />)
-    fireEvent.click(screen.getByRole('tab', { name: '明度' }))
-    const slider = screen.getByRole('slider', { name: '藍色' })
+    fireEvent.click(screen.getByRole('button', { name: '藍色' }))
+    const slider = screen.getByRole('slider', { name: '明度' })
     for (let i = 0; i < 3; i++) fireEvent.keyDown(slider, { key: 'ArrowRight' })
     expect(useEditor.getState().adjustments.lumBlue).toBe(3)
   })

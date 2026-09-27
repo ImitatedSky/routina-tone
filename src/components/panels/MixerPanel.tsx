@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SliderSection, type SliderDef } from '@/components/editor/SliderSection'
-import { BANDS, type Band, type ScalarKey } from '@/engine/adjustments'
+import { BANDS, DEFAULT_ADJUSTMENTS, type Band, type ScalarKey } from '@/engine/adjustments'
+import { useEditor } from '@/editor/editorStore'
+import { cn } from '@/lib/utils'
 
 type Property = 'hue' | 'sat' | 'lum'
 
@@ -49,37 +50,50 @@ function track(property: Property, index: number) {
   return `linear-gradient(to right, ${mix(color, 'black', 65)}, ${color}, ${mix(color, 'white', 65)})`
 }
 
-function slidersFor(property: Property): SliderDef[] {
-  return BANDS.map((band, i) => ({
-    key: (property + band[0].toUpperCase() + band.slice(1)) as ScalarKey,
-    label: BAND_LABELS[band],
-    track: track(property, i),
-  }))
+function keyOf(property: Property, band: Band) {
+  return (property + band[0].toUpperCase() + band.slice(1)) as ScalarKey
 }
 
-const SLIDERS: Record<Property, SliderDef[]> = {
-  hue: slidersFor('hue'),
-  sat: slidersFor('sat'),
-  lum: slidersFor('lum'),
-}
+// 每個顏色的三條滑桿：色相、飽和度、明度
+const SLIDERS = Object.fromEntries(
+  BANDS.map((band, i) => [
+    band,
+    PROPERTIES.map((p) => ({ key: keyOf(p.value, band), label: p.label, track: track(p.value, i) })),
+  ]),
+) as Record<Band, SliderDef[]>
 
-// Lightroom 的混色器（HSL 模式）：一次顯示一種屬性的 8 個色帶
+// Lightroom 混色器的「顏色」模式：先點選一個顏色，下面是它的色相／飽和度／明度
 export function MixerPanel() {
-  const [property, setProperty] = useState<Property>('hue')
-  const label = PROPERTIES.find((p) => p.value === property)!.label
+  const [band, setBand] = useState<Band>('red')
+  // 回傳字串而不是陣列：selector 每次回傳新陣列會讓 zustand 以為一直在變
+  const adjusted = useEditor((s) =>
+    BANDS.filter((b) => PROPERTIES.some((p) => s.adjustments[keyOf(p.value, b)] !== DEFAULT_ADJUSTMENTS[keyOf(p.value, b)])).join(','),
+  ).split(',')
 
   return (
     <div>
-      <Tabs value={property} onValueChange={(v) => setProperty(v as Property)} className="px-4 pt-2">
-        <TabsList className="w-full">
-          {PROPERTIES.map((p) => (
-            <TabsTrigger key={p.value} value={p.value}>
-              {p.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-      <SliderSection key={property} title={label} sliders={SLIDERS[property]} />
+      <div className="grid grid-cols-8 gap-1.5 px-4 pt-3" role="group" aria-label="選擇顏色">
+        {BANDS.map((b) => (
+          <button
+            key={b}
+            type="button"
+            aria-label={BAND_LABELS[b]}
+            aria-pressed={b === band}
+            onClick={() => setBand(b)}
+            className={cn(
+              'relative mx-auto aspect-square w-full max-w-10 rounded-full ring-offset-2 ring-offset-background transition-shadow outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              b === band && 'ring-2 ring-foreground',
+            )}
+            style={{ background: BAND_COLORS[b] }}
+          >
+            {/* 這個顏色調過的話，右上角點一下提醒 */}
+            {adjusted.includes(b) && (
+              <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background bg-foreground" />
+            )}
+          </button>
+        ))}
+      </div>
+      <SliderSection key={band} title={BAND_LABELS[band]} sliders={SLIDERS[band]} />
     </div>
   )
 }
