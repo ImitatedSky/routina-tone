@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useEditor } from '@/editor/editorStore'
 import { exportJpeg } from '@/photo/exportJpeg'
-import { baseName, downloadBlob, safeFilename } from '@/lib/download'
+import { baseName, safeFilename } from '@/lib/download'
+import { saveFile } from '@/lib/saveFile'
 
 export function ExportDialog() {
   const photo = useEditor((s) => s.photo)
@@ -18,8 +19,9 @@ export function ExportDialog() {
     setBusy(true)
     try {
       const result = await exportJpeg(photo.file, useEditor.getState().adjustments, quality / 100)
-      downloadBlob(result.blob, `${safeFilename(baseName(photo.name))}-tone.jpg`)
-      toast.success(`已匯出 ${result.width}×${result.height}`)
+      const saved = await saveFile(result.blob, `${safeFilename(baseName(photo.name))}-tone.jpg`, 'image')
+      if (saved.status === 'cancelled') return
+      toast.success(`已匯出 ${result.width}×${result.height}`, { description: saved.message })
       setOpen(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '匯出失敗')

@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { isDefault } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
-import { downloadBlob, safeFilename } from '@/lib/download'
+import { safeFilename } from '@/lib/download'
+import { saveFile } from '@/lib/saveFile'
 import { PRESET_EXTENSION, parsePresetFile, serializePreset } from '@/presets/presetFile'
 import { addPreset, deletePreset, listPresets, putPreset, type Preset } from '@/storage/db'
 
@@ -44,9 +45,14 @@ export function PresetPanel() {
     })
   }
 
-  function exportOne(preset: Preset) {
+  async function exportOne(preset: Preset) {
     const blob = new Blob([serializePreset(preset.name, preset.adjustments)], { type: 'application/json' })
-    downloadBlob(blob, safeFilename(preset.name) + PRESET_EXTENSION)
+    try {
+      const saved = await saveFile(blob, safeFilename(preset.name) + PRESET_EXTENSION, 'document')
+      if (saved.status === 'saved' && saved.message) toast.success(saved.message)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '匯出失敗')
+    }
   }
 
   async function importFiles(files: FileList) {
@@ -111,7 +117,7 @@ export function PresetPanel() {
               >
                 {preset.name}
               </button>
-              <Button variant="ghost" size="icon-sm" aria-label={`匯出「${preset.name}」`} onClick={() => exportOne(preset)}>
+              <Button variant="ghost" size="icon-sm" aria-label={`匯出「${preset.name}」`} onClick={() => void exportOne(preset)}>
                 <Download />
               </Button>
               <Button variant="ghost" size="icon-sm" aria-label={`刪除「${preset.name}」`} onClick={() => void remove(preset)}>

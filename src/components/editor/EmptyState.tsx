@@ -9,7 +9,9 @@ export function EmptyState() {
         <ImagePlus />
         開啟照片
       </OpenPhotoButton>
-      <p className="text-xs text-muted-foreground">支援 JPEG、PNG、WebP，也可以直接把檔案拖進來</p>
+      <p className="text-xs text-muted-foreground">
+        支援 JPEG、PNG、WebP<span className="hidden md:inline">，也可以直接把檔案拖進來</span>
+      </p>
     </main>
   )
 }

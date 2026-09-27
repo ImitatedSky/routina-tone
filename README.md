@@ -2,7 +2,7 @@
 
 照片調色 App，網頁版：https://imitatedsky.github.io/routina-tone/
 
-之後會包成 Android App 加入 Routina 家族。規劃與版本路線見 [PLAN.md](PLAN.md)。
+Android 版是 Routina 家族的一員，從 Routina Hub 安裝，或到 [Releases](https://github.com/ImitatedSky/routina-tone/releases) 下載 `routina-tone-v*.apk`。規劃與版本路線見 [PLAN.md](PLAN.md)。
 
 ## 功能（v0.1）
 
@@ -33,6 +33,21 @@ npm run build
 | `src/storage/` | IndexedDB：預設集、目前的編輯 |
 | `src/editor/` | 編輯狀態（zustand，含 undo/redo） |
 | `src/components/` | 介面 |
+
+### Android 殼（`android/`）
+
+整個畫面是一個 WebView，載入打包進 APK 的 `dist/`（掛在 `https://appassets.androidplatform.net/routina-tone/`，IndexedDB 才可靠）。零權限。
+
+WebView 不處理 `blob:` 下載，所以存檔走 JS bridge：網頁的 `src/lib/saveFile.ts` 在 App 裡呼叫 `RoutinaToneFiles.saveFile(...)`（`FileSaver.kt`）。照片在 Android 10 以上存進相簿 `Pictures/Routina Tone`，Android 8–9 和預設集跳系統的「另存新檔」。
+
+```sh
+npm run build
+cd android && ./gradlew :app:assembleRelease
+```
+
+發版：`android/app/build.gradle.kts` 的 `versionName` 改好 → commit → `git tag vX.Y.Z` → push tag。CI（`.github/workflows/android.yml`）檢查 tag 與 versionName 一致後簽章並建 Release。
+
+### 設計
 
 由參數算出來的東西（矩陣、之後的曲線 LUT）在 TS 端算好傳進 shader，shader 只負責逐像素套用，色彩數學才能用 vitest 測。
 
