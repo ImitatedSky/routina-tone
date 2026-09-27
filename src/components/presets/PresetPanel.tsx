@@ -1,21 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { Download, FileUp, Plus, Trash2 } from 'lucide-react'
+import { ClipboardPaste, Copy, Download, FileUp, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { isDefault } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
 import { t, useT } from '@/i18n/i18n'
+import { copyText } from '@/lib/clipboard'
 import { safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
 import { PRESET_EXTENSION, parsePresetFile, serializePreset } from '@/presets/presetFile'
 import { parseXmpPreset } from '@/presets/xmp'
 import { addPreset, deletePreset, listPresets, putPreset, type Preset } from '@/storage/db'
+import { PasteImportDialog } from './PasteImportDialog'
 
 export function PresetPanel() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [name, setName] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
+  const [pasteOpen, setPasteOpen] = useState(false)
   const current = useEditor((s) => s.adjustments)
   const apply = useEditor((s) => s.apply)
   const m = useT()
@@ -58,23 +61,45 @@ export function PresetPanel() {
     }
   }
 
+  async function copyOne(preset: Preset) {
+    const ok = await copyText(serializePreset(preset.name, preset.adjustments))
+    if (ok) toast.success(m.presets.copied)
+    else toast.error(m.presets.copyFailed)
+  }
+
+  // 一份預設集的文字：.xmp 是 XML（以 < 開頭），其他當成我們的 JSON。失敗時丟出錯誤
+  async function importText(text: string, fileName: string) {
+    if (/\.xmp$/i.test(fileName) || text.trimStart().startsWith('<')) {
+      const { name: presetName, adjustments, warnings } = parseXmpPreset(text, fileName)
+      await addPreset(presetName, adjustments)
+      if (warnings.length > 0) {
+        toast.warning(m.presets.partiallyApplied(presetName), {
+          description: warnings.join(m.presets.listSeparator),
+        })
+      }
+    } else {
+      const { name: presetName, adjustments } = parsePresetFile(text)
+      await addPreset(presetName, adjustments)
+    }
+  }
+
+  async function importPasted(text: string): Promise<boolean> {
+    try {
+      await importText(text, '')
+      await refresh()
+      toast.success(m.presets.imported(1))
+      return true
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : m.presets.pasteFailed)
+      return false
+    }
+  }
+
   async function importFiles(files: FileList) {
     let imported = 0
     for (const file of Array.from(files)) {
       try {
-        const text = await file.text()
-        if (/\.xmp$/i.test(file.name)) {
-          const { name: presetName, adjustments, warnings } = parseXmpPreset(text, file.name)
-          await addPreset(presetName, adjustments)
-          if (warnings.length > 0) {
-            toast.warning(m.presets.partiallyApplied(presetName), {
-              description: warnings.join(m.presets.listSeparator),
-            })
-          }
-        } else {
-          const { name: presetName, adjustments } = parsePresetFile(text)
-          await addPreset(presetName, adjustments)
-        }
+        await importText(await file.text(), file.name)
         imported++
       } catch (error) {
         toast.error(m.presets.importFileError(file.name, error instanceof Error ? error.message : m.presets.importFailed))
@@ -102,10 +127,20 @@ export function PresetPanel() {
         </Button>
       </form>
 
-      <Button variant="outline" size="sm" className="w-full" onClick={() => importRef.current?.click()}>
-        <FileUp />
-        {m.presets.importButton}
-      </Button>
+      <div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" size="sm" onClick={() => importRef.current?.click()}>
+            <FileUp />
+            {m.presets.importFile}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPasteOpen(true)}>
+            <ClipboardPaste />
+            {m.presets.importPaste}
+          </Button>
+        </div>
+        <p className="mt-1.5 text-center text-xs text-muted-foreground">{m.presets.importHint}</p>
+      </div>
+      <PasteImportDialog open={pasteOpen} onOpenChange={setPasteOpen} onImport={importPasted} />
       <input
         ref={importRef}
         type="file"
@@ -131,6 +166,9 @@ export function PresetPanel() {
               >
                 {preset.name}
               </button>
+              <Button variant="ghost" size="icon-sm" aria-label={m.presets.copyPreset(preset.name)} onClick={() => void copyOne(preset)}>
+                <Copy />
+              </Button>
               <Button variant="ghost" size="icon-sm" aria-label={m.presets.exportPreset(preset.name)} onClick={() => void exportOne(preset)}>
                 <Download />
               </Button>

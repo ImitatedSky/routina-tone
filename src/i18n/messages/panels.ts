@@ -35,8 +35,8 @@ const zh = {
     balance: '平衡',
   },
   wheel: {
-    hue: (n: number) => `色相 ${n}°`,
-    sat: (n: number) => `飽和度 ${n}`,
+    hue: '色相',
+    sat: '飽和度',
   },
 }
 
@@ -77,8 +77,8 @@ export const panels = {
       balance: 'Balance',
     },
     wheel: {
-      hue: (n: number) => `Hue ${n}°`,
-      sat: (n: number) => `Saturation ${n}`,
+      hue: 'Hue',
+      sat: 'Saturation',
     },
   } satisfies typeof zh,
 }

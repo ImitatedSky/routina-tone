@@ -1,5 +1,6 @@
 import type { PointerEvent } from 'react'
 import { useT } from '@/i18n/i18n'
+import { NumberField } from './NumberField'
 import { WHEEL_BACKGROUND, hueSatToPoint, pointToHueSat, tintColor } from './wheelMath'
 
 interface Props {
@@ -13,7 +14,11 @@ interface Props {
   size?: number
 }
 
-// 拖曳色輪任何地方都能選色相與飽和度；雙擊重設
+// 色相繞回 0..359（370 → 10、-10 → 350），飽和度夾在 0..100
+const wrapHue = (v: number) => ((v % 360) + 360) % 360
+const clampSat = (v: number) => Math.min(100, Math.max(0, v))
+
+// 拖曳色輪任何地方都能選色相與飽和度，也可以在下面直接輸入數字；雙擊重設
 export function ColorWheel({ hue, sat, onChange, onCommit, onReset, label, size = 240 }: Props) {
   const t = useT()
   const handle = hueSatToPoint(hue, sat)
@@ -59,9 +64,26 @@ export function ColorWheel({ hue, sat, onChange, onCommit, onReset, label, size 
           }}
         />
       </div>
-      <div className="mt-2 flex justify-center gap-4 text-xs text-muted-foreground tabular-nums">
-        <span>{t.panels.wheel.hue(Math.round(hue))}</span>
-        <span>{t.panels.wheel.sat(Math.round(sat))}</span>
+      <div className="mt-2 flex justify-center gap-4">
+        <NumberField
+          label={t.panels.wheel.hue}
+          unit="°"
+          value={Math.round(hue)}
+          normalize={wrapHue}
+          onSubmit={(h) => {
+            onChange(h, sat)
+            onCommit()
+          }}
+        />
+        <NumberField
+          label={t.panels.wheel.sat}
+          value={Math.round(sat)}
+          normalize={clampSat}
+          onSubmit={(s) => {
+            onChange(hue, s)
+            onCommit()
+          }}
+        />
       </div>
     </div>
   )
