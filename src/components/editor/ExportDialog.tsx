@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, Images, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -8,6 +8,7 @@ import { exportJpeg } from '@/photo/exportJpeg'
 import { baseName, safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
 import { useT } from '@/i18n/i18n'
+import { BatchDialog } from './BatchDialog'
 import { TouchSlider } from './TouchSlider'
 
 export function ExportDialog() {
@@ -17,6 +18,7 @@ export function ExportDialog() {
   const [open, setOpen] = useState(false)
   const [quality, setQuality] = useState(92)
   const [busy, setBusy] = useState(false)
+  const [batchOpen, setBatchOpen] = useState(false)
 
   async function run() {
     if (!photo) return
@@ -57,7 +59,18 @@ export function ExportDialog() {
             onCommit={() => {}}
             onReset={() => setQuality(92)}
           />
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false)
+                setBatchOpen(true)
+              }}
+            >
+              <Images />
+              {t.editor.batch.open}
+            </Button>
             <Button disabled={busy} onClick={run}>
               {busy ? <Loader2 className="animate-spin" /> : <Download />}
               {busy ? labels.busy : labels.run}
@@ -65,6 +78,7 @@ export function ExportDialog() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BatchDialog open={batchOpen} onOpenChange={setBatchOpen} />
     </>
   )
 }

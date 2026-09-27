@@ -16,6 +16,7 @@ Android 版是 Routina 家族的一員，從 Routina Hub 安裝，或到 [Releas
 - 介面有繁體中文與英文，預設跟隨系統，⚙ 設定可切換
 - RGB 直方圖；按住照片看原圖；雙擊滑桿歸零；Ctrl+Z / Ctrl+Shift+Z
 - 以原始尺寸匯出 JPEG，大圖分塊渲染，不受 GPU 貼圖上限限制
+- 批次處理：把目前的設定或某個預設集套到多張照片並全部匯出（不套用裁切）
 - 開 JPEG、PNG、WebP、HEIC（HEIC 在瀏覽器不支援時才載入 WASM 解碼器）
 - 預設集：儲存、匯出成 `.tone.json`、複製成 JSON 文字；匯入檔案（`.tone.json`、Lightroom `.xmp`）或貼上文字
 - 重新整理後自動還原上次編輯的照片與參數
