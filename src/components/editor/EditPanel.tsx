@@ -1,8 +1,10 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CropPanel } from '@/components/crop/CropPanel'
 import { CurvePanel } from '@/components/panels/CurvePanel'
 import { GradingPanel } from '@/components/panels/GradingPanel'
 import { MixerPanel } from '@/components/panels/MixerPanel'
 import { PresetPanel } from '@/components/presets/PresetPanel'
+import { useView } from '@/editor/editorStore'
 import { useT } from '@/i18n/i18n'
 import { SliderSection } from './SliderSection'
 import {
@@ -16,18 +18,23 @@ import {
   withLabels,
 } from './sliders'
 
-const TABS = ['light', 'color', 'curve', 'mixer', 'grading', 'effects', 'presets'] as const
+const TABS = ['light', 'color', 'curve', 'mixer', 'grading', 'effects', 'crop', 'presets'] as const
 
 const PANEL = 'overflow-y-auto pb-4'
 
 export function EditPanel() {
   const t = useT()
   const { sections } = t.editor
+  const setCropMode = useView((s) => s.setCropMode)
 
   return (
     <aside className="flex h-[54%] shrink-0 flex-col border-t md:h-auto md:w-80 md:border-t-0 md:border-l">
-      <Tabs defaultValue="light" className="min-h-0 flex-1 gap-0">
-        {/* 手機上 7 個分頁放不下，可以左右滑 */}
+      <Tabs
+        defaultValue="light"
+        className="min-h-0 flex-1 gap-0"
+        onValueChange={(value) => setCropMode(value === 'crop')}
+      >
+        {/* 手機上 8 個分頁放不下，可以左右滑 */}
         <div className="overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
           <TabsList className="w-max min-w-full">
             {TABS.map((tab) => (
@@ -58,6 +65,9 @@ export function EditPanel() {
           <SliderSection title={sections.sharpening} sliders={withLabels(SHARPEN_SLIDERS, t)} />
           <SliderSection title={sections.vignette} sliders={withLabels(VIGNETTE_SLIDERS, t)} />
           <SliderSection title={sections.grain} sliders={withLabels(GRAIN_SLIDERS, t)} />
+        </TabsContent>
+        <TabsContent value="crop" className={PANEL}>
+          <CropPanel />
         </TabsContent>
         <TabsContent value="presets" className={PANEL}>
           <PresetPanel />

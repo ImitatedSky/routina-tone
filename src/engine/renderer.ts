@@ -3,6 +3,7 @@ import { t } from '@/i18n/i18n'
 import type { Adjustments } from './adjustments'
 import { buildCurveLut } from './curves'
 import { gradingUniforms, mixerUniforms } from './grading'
+import { FULL_CROP, outputSize, outputToSource, toColumnMajor, type CropRect } from './geometry'
 import { estimateHaze } from './haze'
 import { BLUR_SHADER, DEVELOP_SHADER, LUMA_DOWN_SHADER, VERTEX_SHADER } from './shaders'
 import { whiteBalanceMatrix } from './whiteBalance'
@@ -177,24 +178,36 @@ export class Renderer {
     this.deleteTarget(this.sharpenBase)
     this.sharpenBase = null
     this.sharpenRadius = -1
-
-    this.canvas.width = bitmap.width
-    this.canvas.height = bitmap.height
-    // 瀏覽器可能因為記憶體限制悄悄縮小繪圖緩衝區，這時畫出來的不是原尺寸
-    if (gl.drawingBufferWidth !== bitmap.width || gl.drawingBufferHeight !== bitmap.height) {
-      throw new RendererError(t().photo.imageTooLarge(bitmap.width, bitmap.height))
-    }
   }
 
-  render(adj: Adjustments) {
+  /**
+   * 畫出輸出（裁切後）的一塊。canvas 會調成這塊的像素大小。
+   * - crop：另外指定裁切框（裁切模式時傳整個畫框，讓使用者看到整張轉正後的照片）
+   * - outRegion：要畫輸出的哪一塊（0..1）；分塊匯出時才用，預覽是整張
+   */
+  render(adj: Adjustments, options: { crop?: CropRect; outRegion?: CropRect } = {}) {
     if (!this.image || !this.textureBase || !this.clarityBase || !this.haze) return
     const { gl } = this
+    const crop = options.crop
+    const outRegion = options.outRegion ?? FULL_CROP
+    const output = outputSize(adj, this.imageSize, crop)
+    // 目標像素對原圖像素的比例：預覽是縮圖所以 < 1，匯出是 1
+    const renderScale = this.targetWidth / (this.region.width * this.imageSize.width)
+    const width = Math.max(1, Math.round(output.width * outRegion.w * renderScale))
+    const height = Math.max(1, Math.round(output.height * outRegion.h * renderScale))
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width
+      this.canvas.height = height
+      // 瀏覽器可能因為記憶體限制悄悄縮小繪圖緩衝區，這時畫出來的不是原尺寸
+      if (gl.drawingBufferWidth !== width || gl.drawingBufferHeight !== height) {
+        throw new RendererError(t().photo.imageTooLarge(width, height))
+      }
+    }
 
     // 銳化半徑是滑桿，變了才重算
     if (!this.sharpenBase || this.sharpenRadius !== adj.sharpenRadius) {
       this.deleteTarget(this.sharpenBase)
-      const scale = this.targetWidth / (this.region.width * this.imageSize.width)
-      this.sharpenBase = this.blurLuma(this.image, this.targetWidth, this.targetHeight, adj.sharpenRadius * scale)
+      this.sharpenBase = this.blurLuma(this.image, this.targetWidth, this.targetHeight, adj.sharpenRadius * renderScale)
       this.sharpenRadius = adj.sharpenRadius
     }
 
@@ -204,7 +217,7 @@ export class Renderer {
 
     const grading = gradingUniforms(adj)
     const mixer = mixerUniforms(adj)
-    const { region, imageSize } = this
+    const { region } = this
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
@@ -216,7 +229,9 @@ export class Renderer {
       u_haze: this.haze,
       u_curves: this.curves,
       u_region: [region.x, region.y, region.width, region.height],
-      u_imageSize: [imageSize.width, imageSize.height],
+      u_geometry: toColumnMajor(outputToSource(adj, this.imageSize, crop)),
+      u_outRegion: [outRegion.x, outRegion.y, outRegion.w, outRegion.h],
+      u_outputSize: [output.width, output.height],
       u_atmosphere: this.atmosphere,
       u_whiteBalance: whiteBalanceMatrix(adj.temp, adj.tint),
       u_exposure: adj.exposure,

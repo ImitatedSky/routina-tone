@@ -102,8 +102,10 @@ uniform sampler2D u_clarityBase;  // 整張照片的大範圍模糊亮度（清�
 uniform sampler2D u_haze;         // 整張照片的暗通道
 uniform sampler2D u_curves;       // 1024×4：主曲線、紅、綠、藍
 
-uniform vec4 u_region;     // 目標在整張照片中的位置（0..1）：xy 起點、zw 大小
-uniform vec2 u_imageSize;  // 整張照片的像素尺寸
+uniform vec4 u_region;     // 目標（來源的一塊）在整張原圖中的位置（0..1）：xy 起點、zw 大小
+uniform mat3 u_geometry;   // 輸出 uv → 原圖 uv（裁切、拉直、旋轉、翻轉），見 geometry.ts
+uniform vec4 u_outRegion;  // 這次畫的是整張輸出裡的哪一塊（0..1）
+uniform vec2 u_outputSize; // 整張輸出（裁切後）的原圖像素尺寸
 uniform vec3 u_atmosphere;
 uniform mat3 u_whiteBalance;
 uniform float u_exposure;
@@ -197,13 +199,17 @@ float valueNoise(vec2 x) {
 }
 
 void main() {
-  vec2 imageUv = u_region.xy + v_uv * u_region.zw;
-  vec3 lin = srgbToLinear(texture(u_image, v_uv).rgb);
+  vec2 outUv = u_outRegion.xy + v_uv * u_outRegion.zw;
+  vec2 imageUv = (u_geometry * vec3(outUv, 1.0)).xy;
+  // 裁切模式顯示整個畫框，轉過的照片以外的角落畫成暗灰
+  bool outside = any(lessThan(imageUv, vec2(0.0))) || any(greaterThan(imageUv, vec2(1.0)));
+  vec2 tileUv = (imageUv - u_region.xy) / u_region.zw;
+  vec3 lin = srgbToLinear(texture(u_image, tileUv).rgb);
 
   // 局部對比用的 log 亮度都取自原圖，和曝光、白平衡無關，所以只要算一次
   float sourceLog = log2(dot(lin, LUMA) + LOG_EPS);
-  float textureLog = log2(srgbToLinear1(texture(u_textureBase, v_uv).r) + LOG_EPS);
-  float sharpenLog = log2(srgbToLinear1(texture(u_sharpenBase, v_uv).r) + LOG_EPS);
+  float textureLog = log2(srgbToLinear1(texture(u_textureBase, tileUv).r) + LOG_EPS);
+  float sharpenLog = log2(srgbToLinear1(texture(u_sharpenBase, tileUv).r) + LOG_EPS);
   float baseY = srgbToLinear1(texture(u_clarityBase, imageUv).r);
   float clarityLog = log2(baseY + LOG_EPS);
 
@@ -291,10 +297,10 @@ void main() {
   vec4 grade = inShadow * u_gradeShadow + inMidtone * u_gradeMidtone + inHighlight * u_gradeHighlight + u_gradeGlobal;
   p += grade.rgb + grade.a;
 
-  // 暗角：在整張照片的座標上算，分塊匯出時才會接得起來
+  // 暗角：在整張輸出（裁切後）的座標上算，和 Lightroom 的裁切後暗角一樣；分塊匯出時才接得起來
   if (u_vignette.x != 0.0) {
-    vec2 c = (imageUv - 0.5) * 2.0;
-    float aspect = u_imageSize.x / u_imageSize.y;
+    vec2 c = (outUv - 0.5) * 2.0;
+    float aspect = u_outputSize.x / u_outputSize.y;
     vec2 circle = aspect > 1.0 ? vec2(c.x, c.y / aspect) : vec2(c.x * aspect, c.y);
     vec2 q = abs(mix(c, circle, max(u_vignette.w, 0.0)));
     float n = u_vignette.w < 0.0 ? mix(2.0, 6.0, -u_vignette.w) : 2.0;
@@ -305,14 +311,15 @@ void main() {
     p = u_vignette.x < 0.0 ? p * (1.0 + u_vignette.x * v) : mix(p, vec3(1.0), u_vignette.x * v);
   }
 
-  // 顆粒：以原圖像素為單位的雜訊，預覽與匯出一致；中間調最明顯
+  // 顆粒：以輸出的原圖像素為單位的雜訊，預覽與匯出一致；中間調最明顯
   if (u_grain.x > 0.0) {
-    vec2 cell = imageUv * u_imageSize / u_grain.y;
+    vec2 cell = outUv * u_outputSize / u_grain.y;
     float noise = mix(valueNoise(cell), valueNoise(cell * 2.7 + 13.0), u_grain.z * 0.6);
     float y = clamp(dot(p, LUMA), 0.0, 1.0);
     p += (noise - 0.5) * u_grain.x * 0.28 * (0.35 + 2.6 * y * (1.0 - y));
   }
 
+  if (outside) p = vec3(0.1);
   outColor = vec4(clamp(p, 0.0, 1.0), 1.0);
 }
 `

@@ -3,7 +3,7 @@ import { ClipboardPaste, Copy, Download, FileUp, Plus, Trash2 } from 'lucide-rea
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { isDefault } from '@/engine/adjustments'
+import { applyStyle, isDefault, withoutGeometry } from '@/engine/adjustments'
 import { useEditor } from '@/editor/editorStore'
 import { t, useT } from '@/i18n/i18n'
 import { copyText } from '@/lib/clipboard'
@@ -34,7 +34,8 @@ export function PresetPanel() {
   async function save() {
     const trimmed = name.trim()
     if (!trimmed) return
-    await addPreset(trimmed, current)
+    // 裁切、拉直屬於這張照片，不存進預設集
+    await addPreset(trimmed, withoutGeometry(current))
     setName('')
     await refresh()
     toast.success(m.presets.saved(trimmed))
@@ -121,7 +122,7 @@ export function PresetPanel() {
         }}
       >
         <Input placeholder={m.presets.namePlaceholder} value={name} onChange={(e) => setName(e.target.value)} />
-        <Button type="submit" size="default" disabled={!name.trim() || isDefault(current)}>
+        <Button type="submit" size="default" disabled={!name.trim() || isDefault(withoutGeometry(current))}>
           <Plus />
           {m.common.save}
         </Button>
@@ -162,7 +163,7 @@ export function PresetPanel() {
               <button
                 type="button"
                 className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-sm hover:text-primary"
-                onClick={() => apply(preset.adjustments)}
+                onClick={() => apply(applyStyle(useEditor.getState().adjustments, preset.adjustments))}
               >
                 {preset.name}
               </button>

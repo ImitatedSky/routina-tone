@@ -52,6 +52,14 @@ export type ScalarKey =
   | 'grainAmount'
   | 'grainSize'
   | 'grainRoughness'
+  // 幾何：裁切框（在轉正、旋轉後的畫面裡，0..1）、拉直角度、90° 旋轉次數、水平翻轉
+  | 'cropX'
+  | 'cropY'
+  | 'cropW'
+  | 'cropH'
+  | 'straighten'
+  | 'rotation'
+  | 'flipH'
 
 /** @deprecated 舊名稱，等同 ScalarKey */
 export type AdjustmentKey = ScalarKey
@@ -134,7 +142,32 @@ const SPECS = {
   grainAmount: POSITIVE,
   grainSize: { ...POSITIVE, default: 25 },
   grainRoughness: { ...POSITIVE, default: 50 },
+
+  cropX: { min: 0, max: 1, step: 0.0001, default: 0 },
+  cropY: { min: 0, max: 1, step: 0.0001, default: 0 },
+  cropW: { min: 0.01, max: 1, step: 0.0001, default: 1 },
+  cropH: { min: 0.01, max: 1, step: 0.0001, default: 1 },
+  straighten: { min: -45, max: 45, step: 0.1, default: 0 },
+  // 順時針轉了幾個 90°
+  rotation: { min: 0, max: 3, step: 1, default: 0 },
+  flipH: { min: 0, max: 1, step: 1, default: 0 },
 } as Record<ScalarKey, Spec>
+
+// 幾何設定屬於「這張照片」而不是「風格」，和 Lightroom 一樣不存進預設集，套用預設集時也保留原本的
+export const GEOMETRY_KEYS: ScalarKey[] = ['cropX', 'cropY', 'cropW', 'cropH', 'straighten', 'rotation', 'flipH']
+
+export function withoutGeometry(adj: Adjustments): Adjustments {
+  const result = { ...adj }
+  for (const key of GEOMETRY_KEYS) result[key] = SPECS[key].default
+  return result
+}
+
+// 套用預設集：風格來自 style，幾何保留 current 的
+export function applyStyle(current: Adjustments, style: Adjustments): Adjustments {
+  const result = { ...style }
+  for (const key of GEOMETRY_KEYS) result[key] = current[key]
+  return result
+}
 
 export const SCALAR_KEYS = Object.keys(SPECS) as ScalarKey[]
 /** @deprecated 舊名稱，等同 SCALAR_KEYS */

@@ -33,6 +33,8 @@ interface EditorState {
 
   openPhoto: (photo: Photo, adjustments?: Adjustments) => void
   setAdjustment: (key: ScalarKey, value: number) => void
+  // 一次改多個數值（例如裁切框的四個邊），拖曳中即時更新，放開後一樣呼叫 commit()
+  setAdjustments: (values: Partial<Record<ScalarKey, number>>) => void
   // 點曲線即時更新（拖曳中），放開後一樣呼叫 commit()
   setCurve: (channel: CurveChannel, points: CurvePoint[]) => void
   commit: () => void
@@ -55,6 +57,14 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setAdjustment: (key, value) => {
     set((s) => ({ adjustments: { ...s.adjustments, [key]: clampAdjustment(key, value) } }))
+  },
+
+  setAdjustments: (values) => {
+    set((s) => {
+      const next = { ...s.adjustments }
+      for (const [key, value] of Object.entries(values) as [ScalarKey, number][]) next[key] = clampAdjustment(key, value)
+      return { adjustments: next }
+    })
   },
 
   setCurve: (channel, points) => {
@@ -96,7 +106,13 @@ interface ViewState {
   showOriginal: boolean
   showHistogram: boolean
   histogram: Histogram | null
+  // 在裁切分頁時顯示整個畫框與裁切框
+  cropMode: boolean
+  // 裁切的長寬比：null = 自由；其他是像素的寬 / 高
+  cropAspect: number | null
   setShowOriginal: (value: boolean) => void
+  setCropMode: (value: boolean) => void
+  setCropAspect: (value: number | null) => void
   toggleHistogram: () => void
   setHistogram: (histogram: Histogram | null) => void
 }
@@ -105,7 +121,11 @@ export const useView = create<ViewState>((set) => ({
   showOriginal: false,
   showHistogram: true,
   histogram: null,
+  cropMode: false,
+  cropAspect: null,
   setShowOriginal: (showOriginal) => set({ showOriginal }),
+  setCropMode: (cropMode) => set({ cropMode }),
+  setCropAspect: (cropAspect) => set({ cropAspect }),
   toggleHistogram: () => set((s) => ({ showHistogram: !s.showHistogram })),
   setHistogram: (histogram) => set({ histogram }),
 }))

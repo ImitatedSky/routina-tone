@@ -1,4 +1,5 @@
 import type { Adjustments } from '@/engine/adjustments'
+import { outputSize, outputToSource, sourceBounds } from '@/engine/geometry'
 import { Renderer, tileMargin } from '@/engine/renderer'
 import { t } from '@/i18n/i18n'
 import { PREVIEW_MAX_EDGE, decodeImage, resizeImage } from './decode'
@@ -9,15 +10,17 @@ export interface ExportResult {
   height: number
 }
 
-// 每塊最大邊長。GPU 貼圖上限常見是 4096–16384，取保守值，手機記憶體也吃得消
-const MAX_TILE = 4096
+// 輸出每塊的邊長上限。拉直 45° 時一塊輸出要讀的原圖外接框會變成約 1.41 倍，再加上模糊的邊，
+// 所以取 GPU 貼圖上限的 60%；手機記憶體也吃得消
+const MAX_TILE = 2560
 
 /**
  * 用原圖重新跑一次同樣的調色，輸出 JPEG。
  *
- * 原圖分塊渲染再拼回一張 2D canvas，所以不受 GPU 貼圖上限限制。每塊多讀一圈邊
- * （tileMargin），模糊類的效果在接縫處才會和整張一起算時一樣。
- * 大範圍的分析（清晰度底圖、去霧）用和預覽一樣大小的縮圖，匯出結果才會和預覽一致。
+ * 在「輸出（裁切後）」上分塊：每塊算出它對應到原圖的哪一塊（拉直後是斜的，取外接框），
+ * 多讀一圈邊（tileMargin）讓模糊類效果在接縫處和整張一起算時一樣，渲染後拼回一張 2D canvas，
+ * 所以不受 GPU 貼圖上限限制。大範圍的分析（清晰度底圖、去霧）用和預覽一樣大小的縮圖，
+ * 匯出結果才會和預覽一致。
  */
 export async function exportJpeg(
   source: Blob,
@@ -34,14 +37,16 @@ export async function exportJpeg(
     renderer.setAnalysis(analysis)
     if (analysis !== full) analysis.close()
 
+    const out = outputSize(adj, image)
+    const toSource = outputToSource(adj, image)
     const margin = tileMargin(adj, image)
-    const tileSize = Math.min(renderer.maxTextureSize, MAX_TILE) - 2 * margin
-    const columns = Math.ceil(image.width / tileSize)
-    const rows = Math.ceil(image.height / tileSize)
+    const tileSize = Math.min(MAX_TILE, Math.floor(renderer.maxTextureSize * 0.6))
+    const columns = Math.ceil(out.width / tileSize)
+    const rows = Math.ceil(out.height / tileSize)
 
     const output = document.createElement('canvas')
-    output.width = image.width
-    output.height = image.height
+    output.width = out.width
+    output.height = out.height
     const ctx = output.getContext('2d')
     if (!ctx) throw new Error(t().photo.outputCanvasFailed)
 
@@ -49,19 +54,22 @@ export async function exportJpeg(
       for (let col = 0; col < columns; col++) {
         const x = col * tileSize
         const y = row * tileSize
-        const width = Math.min(tileSize, image.width - x)
-        const height = Math.min(tileSize, image.height - y)
-        // 加上邊，但不超出照片
-        const ox = Math.max(0, x - margin)
-        const oy = Math.max(0, y - margin)
-        const ow = Math.min(image.width, x + width + margin) - ox
-        const oh = Math.min(image.height, y + height + margin) - oy
+        const width = Math.min(tileSize, out.width - x)
+        const height = Math.min(tileSize, out.height - y)
+        const outRegion = { x: x / out.width, y: y / out.height, w: width / out.width, h: height / out.height }
 
-        const tile = await createImageBitmap(full, ox, oy, ow, oh)
+        // 這塊輸出要用到的原圖範圍（像素），加上邊但不超出原圖
+        const b = sourceBounds(toSource, outRegion)
+        const sx = Math.max(0, Math.floor(b.x * image.width) - margin)
+        const sy = Math.max(0, Math.floor(b.y * image.height) - margin)
+        const sw = Math.min(image.width, Math.ceil((b.x + b.w) * image.width) + margin) - sx
+        const sh = Math.min(image.height, Math.ceil((b.y + b.h) * image.height) + margin) - sy
+
+        const tile = await createImageBitmap(full, sx, sy, Math.max(1, sw), Math.max(1, sh))
         try {
-          renderer.setTarget(tile, { x: ox, y: oy, width: ow, height: oh }, image)
-          renderer.render(adj)
-          ctx.drawImage(glCanvas, x - ox, y - oy, width, height, x, y, width, height)
+          renderer.setTarget(tile, { x: sx, y: sy, width: Math.max(1, sw), height: Math.max(1, sh) }, image)
+          renderer.render(adj, { outRegion })
+          ctx.drawImage(glCanvas, 0, 0, glCanvas.width, glCanvas.height, x, y, width, height)
         } finally {
           tile.close()
         }
@@ -71,7 +79,7 @@ export async function exportJpeg(
 
     const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/jpeg', quality))
     if (!blob) throw new Error(t().photo.jpegEncodeFailed)
-    return { blob, width: image.width, height: image.height }
+    return { blob, width: out.width, height: out.height }
   } finally {
     full.close()
     renderer.dispose()
