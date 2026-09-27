@@ -143,7 +143,12 @@ interface ViewState {
   maskMode: boolean
   selectedMask: string | null
   showMask: boolean
+  // 筆刷工具：直徑（原圖長邊的比例）、羽化 0..100、是否是橡皮擦
+  brushSize: number
+  brushFeather: number
+  brushErase: boolean
   setShowOriginal: (value: boolean) => void
+  setBrush: (patch: Partial<{ brushSize: number; brushFeather: number; brushErase: boolean }>) => void
   setMaskMode: (value: boolean) => void
   selectMask: (id: string | null) => void
   setShowMask: (value: boolean) => void
@@ -162,7 +167,11 @@ export const useView = create<ViewState>((set) => ({
   maskMode: false,
   selectedMask: null,
   showMask: false,
+  brushSize: 0.08,
+  brushFeather: 50,
+  brushErase: false,
   setShowOriginal: (showOriginal) => set({ showOriginal }),
+  setBrush: (patch) => set(patch),
   setMaskMode: (maskMode) => set({ maskMode }),
   selectMask: (selectedMask) => set({ selectedMask }),
   setShowMask: (showMask) => set({ showMask }),

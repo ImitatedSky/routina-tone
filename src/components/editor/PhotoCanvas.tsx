@@ -35,8 +35,10 @@ function draw(renderer: Renderer, adjustments: Adjustments, view: DrawView) {
 
 function currentView(adjustments: Adjustments): DrawView {
   const v = useView.getState()
-  const index = v.maskMode && v.showMask ? adjustments.masks.findIndex((m) => m.id === v.selectedMask) : -1
-  return { showOriginal: v.showOriginal, cropMode: v.cropMode, showMask: index }
+  const index = v.maskMode ? adjustments.masks.findIndex((m) => m.id === v.selectedMask) : -1
+  // 畫筆刷時一定要看得到畫到哪裡，所以筆刷遮罩不管開關都顯示紅色範圍（和 Lightroom 一樣）
+  const visible = index >= 0 && (v.showMask || adjustments.masks[index].type === 'brush')
+  return { showOriginal: v.showOriginal, cropMode: v.cropMode, showMask: visible ? index : -1 }
 }
 
 export function PhotoCanvas() {

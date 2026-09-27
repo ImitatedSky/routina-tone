@@ -5,7 +5,8 @@ import { buildCurveLut } from './curves'
 import { gradingUniforms, mixerUniforms } from './grading'
 import { FULL_CROP, outputSize, outputToSource, toColumnMajor, type CropRect } from './geometry'
 import { estimateHaze } from './haze'
-import { maskUniforms } from './masks'
+import { BRUSH_SIZE, rasterizeStrokes } from './brush'
+import { MAX_MASKS, maskUniforms, type BrushStroke, type Mask } from './masks'
 import { BLUR_SHADER, DEVELOP_SHADER, LUMA_DOWN_SHADER, VERTEX_SHADER } from './shaders'
 import { whiteBalanceMatrix } from './whiteBalance'
 
@@ -85,6 +86,10 @@ export class Renderer {
 
   private histogramTarget: Target | null = null
 
+  // 筆刷遮罩的點陣，每個遮罩一層；記住上次畫的是哪一份筆畫，沒變就不重畫
+  private readonly brush: WebGLTexture
+  private readonly brushStrokes: (BrushStroke[] | null)[] = Array(MAX_MASKS).fill(null)
+
   constructor(canvas: HTMLCanvasElement, options: { preserveDrawingBuffer?: boolean } = {}) {
     this.canvas = canvas
     const gl = canvas.getContext('webgl2', {
@@ -101,6 +106,13 @@ export class Renderer {
     this.triangle = twgl.createBufferInfoFromArrays(gl, {
       a_position: { numComponents: 2, data: [-1, -1, 3, -1, -1, 3] },
     })
+    this.brush = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.brush)
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R8, BRUSH_SIZE, BRUSH_SIZE, MAX_MASKS)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     this.curves = twgl.createTexture(gl, {
       width: CURVE_LUT_SIZE,
       height: 4,
@@ -216,6 +228,7 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.curves)
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, CURVE_LUT_SIZE, 4, gl.RED, gl.FLOAT, lut)
 
+    this.updateBrushLayers(adj.masks)
     const masks = maskUniforms(adj.masks)
     const grading = gradingUniforms(adj)
     const mixer = mixerUniforms(adj)
@@ -242,6 +255,7 @@ export class Renderer {
       u_maskB: masks.b,
       u_maskWB: masks.whiteBalance,
       u_showMask: options.showMask ?? -1,
+      u_brush: this.brush,
       u_atmosphere: this.atmosphere,
       u_whiteBalance: whiteBalanceMatrix(adj.temp, adj.tint),
       u_exposure: adj.exposure,
@@ -313,11 +327,24 @@ export class Renderer {
 
   dispose() {
     const { gl } = this
-    for (const t of [this.image, this.haze, this.curves]) if (t) gl.deleteTexture(t)
+    for (const t of [this.image, this.haze, this.curves, this.brush]) if (t) gl.deleteTexture(t)
     for (const t of [this.clarityBase, this.textureBase, this.sharpenBase, this.histogramTarget]) this.deleteTarget(t)
     this.image = null
     // 主動釋放 GPU 記憶體，不等 GC（匯出時的全尺寸貼圖很大）
     gl.getExtension('WEBGL_lose_context')?.loseContext()
+  }
+
+  private updateBrushLayers(masks: Mask[]) {
+    const { gl } = this
+    masks.slice(0, MAX_MASKS).forEach((mask, layer) => {
+      if (mask.type !== 'brush' || this.brushStrokes[layer] === mask.strokes) return
+      this.brushStrokes[layer] = mask.strokes
+      const pixels = rasterizeStrokes(mask.strokes, this.imageSize)
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.brush)
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+      gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, BRUSH_SIZE, BRUSH_SIZE, 1, gl.RED, gl.UNSIGNED_BYTE, pixels)
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+    })
   }
 
   private uploadImage(bitmap: ImageBitmap): WebGLTexture {

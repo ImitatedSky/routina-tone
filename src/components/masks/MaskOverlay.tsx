@@ -1,6 +1,6 @@
-import { useRef, type PointerEvent } from 'react'
-import { invertAffine, mapPoint, outputToSource } from '@/engine/geometry'
-import type { Mask } from '@/engine/masks'
+import { useRef, useState, type PointerEvent } from 'react'
+import { invertAffine, mapPoint, outputSize, outputToSource } from '@/engine/geometry'
+import { MAX_STROKE_POINTS, MAX_STROKES, type Mask } from '@/engine/masks'
 import { useEditor, useView } from '@/editor/editorStore'
 import { useT } from '@/i18n/i18n'
 
@@ -11,7 +11,7 @@ interface Box {
   height: number
 }
 
-type Handle = 'start' | 'end' | 'move' | 'center' | 'rx' | 'ry'
+type Handle = 'start' | 'end' | 'move' | 'center' | 'rx' | 'ry' | 'paint'
 
 interface Drag {
   pointerId: number
@@ -29,6 +29,11 @@ export function MaskOverlay({ box }: { box: Box }) {
   const t = useT()
   const drag = useRef<Drag | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  // 筆刷的游標（畫面座標），手指或滑鼠在畫布上時顯示
+  const [cursor, setCursor] = useState<[number, number] | null>(null)
+  const brushSize = useView((s) => s.brushSize)
+  const brushFeather = useView((s) => s.brushFeather)
+  const brushErase = useView((s) => s.brushErase)
   const photo = useEditor((s) => s.photo)
   const adjustments = useEditor((s) => s.adjustments)
   const selectedId = useView((s) => s.selectedMask)
@@ -57,9 +62,42 @@ export function MaskOverlay({ box }: { box: Box }) {
     drag.current = { pointerId: e.pointerId, handle, startSrc: toSrc(e.clientX, e.clientY), startMask: mask }
   }
 
+  // 原圖像素上筆刷的半徑，以及畫面像素 / 原圖像素的比例
+  const longEdge = Math.max(image.width, image.height)
+  const screenScale = box.width / outputSize(adjustments, image).width
+  const brushRadius = (brushSize * longEdge) / 2
+
+  function startPaint(e: PointerEvent<SVGRectElement>, mask: Mask) {
+    if (e.button !== 0 || mask.strokes.length >= MAX_STROKES) return
+    svgRef.current?.setPointerCapture?.(e.pointerId)
+    const [x, y] = toSrc(e.clientX, e.clientY)
+    const stroke = { points: [x, y], size: brushSize, feather: brushFeather, erase: brushErase }
+    useEditor.getState().updateMask(mask.id, { strokes: [...mask.strokes, stroke] })
+    drag.current = { pointerId: e.pointerId, handle: 'paint', startSrc: [x, y], startMask: mask }
+  }
+
+  function paint(e: PointerEvent<SVGSVGElement>, d: Drag) {
+    const [x, y] = toSrc(e.clientX, e.clientY)
+    const mask = useEditor.getState().adjustments.masks.find((m) => m.id === d.startMask.id)
+    const last = mask?.strokes.at(-1)
+    if (!mask || !last || last.points.length >= MAX_STROKE_POINTS * 2) return
+    // 移動不到半徑的 1/5 就不加點，路徑才不會長得太快
+    const lx = last.points[last.points.length - 2]
+    const ly = last.points[last.points.length - 1]
+    if (Math.hypot((x - lx) * image.width, (y - ly) * image.height) < brushRadius * 0.2) return
+    const updated = { ...last, points: [...last.points, x, y] }
+    useEditor.getState().updateMask(mask.id, { strokes: [...mask.strokes.slice(0, -1), updated] })
+  }
+
   function onPointerMove(e: PointerEvent<SVGSVGElement>) {
+    const rect = svgRef.current?.getBoundingClientRect()
+    if (rect) setCursor([e.clientX - rect.left, e.clientY - rect.top])
     const d = drag.current
     if (!d || d.pointerId !== e.pointerId) return
+    if (d.handle === 'paint') {
+      paint(e, d)
+      return
+    }
     const [x, y] = toSrc(e.clientX, e.clientY)
     const m = d.startMask
     const dx = x - d.startSrc[0]
@@ -146,9 +184,19 @@ export function MaskOverlay({ box }: { box: Box }) {
     )
   }
 
+  // 筆刷的圖釘放在第一筆的起點；還沒畫過就放中央
+  function pinPosition(mask: Mask): [number, number] {
+    if (mask.type === 'radial') return toScreen(mask.cx, mask.cy)
+    if (mask.type === 'brush') {
+      const first = mask.strokes[0]?.points
+      return first ? toScreen(first[0], first[1]) : [box.width / 2, box.height / 2]
+    }
+    return toScreen((mask.x0 + mask.x1) / 2, (mask.y0 + mask.y1) / 2)
+  }
+
   // 沒選中的遮罩只畫一個小圖釘，點一下選它
   function renderPin(mask: Mask) {
-    const p = mask.type === 'radial' ? toScreen(mask.cx, mask.cy) : toScreen((mask.x0 + mask.x1) / 2, (mask.y0 + mask.y1) / 2)
+    const p = pinPosition(mask)
     return (
       <g key={mask.id} className="cursor-pointer" onPointerDown={(e) => { e.stopPropagation(); selectMask(mask.id) }}>
         <circle cx={p[0]} cy={p[1]} r={20} fill="transparent" />
@@ -158,6 +206,7 @@ export function MaskOverlay({ box }: { box: Box }) {
   }
 
   const selected = adjustments.masks.find((m) => m.id === selectedId)
+  const painting = selected?.type === 'brush'
 
   return (
     <svg
@@ -168,9 +217,21 @@ export function MaskOverlay({ box }: { box: Box }) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onPointerLeave={() => setCursor(null)}
     >
+      {/* 筆刷：整個畫面都是畫布 */}
+      {painting && selected && (
+        <rect width="100%" height="100%" fill="transparent" className="cursor-crosshair" onPointerDown={(e) => startPaint(e, selected)} />
+      )}
       {adjustments.masks.filter((m) => m.id !== selectedId).map(renderPin)}
-      {selected && (selected.type === 'linear' ? renderLinear(selected) : renderRadial(selected))}
+      {selected?.type === 'linear' && renderLinear(selected)}
+      {selected?.type === 'radial' && renderRadial(selected)}
+      {painting && cursor && (
+        <g className="pointer-events-none">
+          <circle cx={cursor[0]} cy={cursor[1]} r={brushRadius * screenScale} fill="none" stroke={brushErase ? 'rgb(255 120 120)' : 'white'} strokeWidth={1.5} />
+          <circle cx={cursor[0]} cy={cursor[1]} r={brushRadius * screenScale * (1 - brushFeather / 100)} fill="none" stroke="white" strokeOpacity={0.5} strokeDasharray="4 4" />
+        </g>
+      )}
     </svg>
   )
 }

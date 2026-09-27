@@ -5,7 +5,7 @@ import { whiteBalanceMatrix } from './whiteBalance'
 // 位置存在「原圖 uv」座標上，所以裁切、拉直之後遮罩還是黏在同一塊內容上。
 // 每個遮罩有自己的一組局部調整，shader 依遮罩權重把它們加到整體的數值上。
 
-export const MASK_TYPES = ['linear', 'radial'] as const
+export const MASK_TYPES = ['linear', 'radial', 'brush'] as const
 export type MaskType = (typeof MASK_TYPES)[number]
 
 export const LOCAL_KEYS = [
@@ -22,6 +22,18 @@ export const LOCAL_KEYS = [
 ] as const
 export type LocalKey = (typeof LOCAL_KEYS)[number]
 
+// 筆刷的一筆：經過的點（原圖 uv，x0,y0,x1,y1…攤平存），筆刷直徑（原圖長邊的比例）、羽化 0..100、是否是橡皮擦
+export interface BrushStroke {
+  points: number[]
+  size: number
+  feather: number
+  erase: boolean
+}
+
+// 一個筆刷遮罩最多幾筆、一筆最多幾個點，避免資料無限長大
+export const MAX_STROKES = 300
+export const MAX_STROKE_POINTS = 4000
+
 export interface Mask {
   id: string
   type: MaskType
@@ -37,6 +49,8 @@ export interface Mask {
   ry: number
   feather: number
   invert: boolean
+  // 筆刷遮罩畫過的每一筆（其他型別是空陣列）
+  strokes: BrushStroke[]
   adjust: Record<LocalKey, number>
 }
 
@@ -72,12 +86,27 @@ export function createMask(type: MaskType, id: string = crypto.randomUUID()): Ma
     ry: 0.25,
     feather: 50,
     invert: false,
+    strokes: [],
     adjust: { ...ZERO_ADJUST },
   }
 }
 
 function num(value: unknown, fallback: number, min = -Infinity, max = Infinity) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
+}
+
+function normalizeStrokes(input: unknown): BrushStroke[] {
+  if (!Array.isArray(input)) return []
+  const strokes: BrushStroke[] = []
+  for (const item of input.slice(0, MAX_STROKES)) {
+    if (typeof item !== 'object' || item === null) continue
+    const r = item as Record<string, unknown>
+    if (!Array.isArray(r.points)) continue
+    const points = r.points.slice(0, MAX_STROKE_POINTS * 2).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    if (points.length < 2 || points.length % 2 !== 0) continue
+    strokes.push({ points, size: num(r.size, 0.05, 0.002, 1), feather: num(r.feather, 50, 0, 100), erase: r.erase === true })
+  }
+  return strokes
 }
 
 // 從不可信的資料讀遮罩：不認得的型別丟掉，數值夾在範圍內，最多 MAX_MASKS 個
@@ -102,6 +131,7 @@ export function normalizeMasks(input: unknown): Mask[] {
       ry: num(r.ry, base.ry, 0.005, 2),
       feather: num(r.feather, base.feather, 0, 100),
       invert: r.invert === true,
+      strokes: normalizeStrokes(r.strokes),
       adjust: Object.fromEntries(
         LOCAL_KEYS.map((k) => [k, num(adjust[k], 0, LOCAL_RANGES[k].min, LOCAL_RANGES[k].max)]),
       ) as Record<LocalKey, number>,
@@ -142,7 +172,9 @@ export function maskUniforms(masks: Mask[]): MaskUniforms {
     }
     const radial = m.type === 'radial'
     u.shape.set(radial ? [m.cx, m.cy, m.rx, m.ry] : [m.x0, m.y0, m.x1, m.y1], i * 4)
-    u.info.set([radial ? 1 : 0, m.feather / 100, m.invert ? 1 : 0, 0], i * 4)
+    // 筆刷遮罩的範圍畫在貼圖陣列的第 i 層（w = 層）
+    const type = m.type === 'brush' ? 2 : radial ? 1 : 0
+    u.info.set([type, m.feather / 100, m.invert ? 1 : 0, i], i * 4)
     const k = m.adjust
     u.a.set([k.exposure, k.contrast / 100, k.highlights / 100, k.shadows / 100], i * 4)
     u.b.set([k.saturation / 100, k.clarity / 100, k.texture / 100, k.dehaze / 100], i * 4)

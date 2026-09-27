@@ -1,4 +1,4 @@
-import { Circle, RotateCcw, Trash2, TrendingUp } from 'lucide-react'
+import { Brush, Circle, Eraser, RotateCcw, Trash2, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TouchSlider } from '@/components/editor/TouchSlider'
 import { PRESENCE_SLIDERS, WHITE_BALANCE_SLIDERS } from '@/components/editor/sliders'
@@ -63,6 +63,10 @@ export function MaskPanel() {
           <Circle />
           {t.masks.addRadial}
         </Button>
+        <Button variant="outline" size="sm" disabled={isFull} onClick={() => add('brush')}>
+          <Brush />
+          {t.masks.addBrush}
+        </Button>
         {isFull && <p className="text-xs text-muted-foreground">{t.masks.full(MAX_MASKS)}</p>}
       </div>
 
@@ -88,7 +92,13 @@ export function MaskPanel() {
                     className="flex h-8 flex-1 items-center gap-2 rounded-lg px-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:h-10"
                     onClick={() => useView.getState().selectMask(mask.id)}
                   >
-                    {mask.type === 'linear' ? <TrendingUp className="size-4" /> : <Circle className="size-4" />}
+                    {mask.type === 'linear' ? (
+                      <TrendingUp className="size-4" />
+                    ) : mask.type === 'radial' ? (
+                      <Circle className="size-4" />
+                    ) : (
+                      <Brush className="size-4" />
+                    )}
                     {name}
                   </button>
                   <Button variant="ghost" size="icon-sm" aria-label={t.masks.deleteMask(name)} onClick={() => remove(mask.id)}>
@@ -141,6 +151,8 @@ function MaskEditor({ mask, name }: { mask: Mask; name: string }) {
           <RotateCcw />
         </Button>
       </div>
+
+      {mask.type === 'brush' && <BrushControls mask={mask} />}
 
       {mask.type === 'radial' && (
         <section className="px-4 py-2">
@@ -202,6 +214,69 @@ function MaskEditor({ mask, name }: { mask: Mask; name: string }) {
 }
 
 // 開關樣式的按鈕
+// 筆刷工具的大小、羽化、橡皮擦（是工具設定，不是遮罩本身的資料），加上清除畫過的範圍
+function BrushControls({ mask }: { mask: Mask }) {
+  const t = useT()
+  const size = useView((s) => s.brushSize)
+  const feather = useView((s) => s.brushFeather)
+  const erase = useView((s) => s.brushErase)
+  const setBrush = useView((s) => s.setBrush)
+  const percent = Math.round(size * 100)
+
+  return (
+    <section className="px-4 py-2">
+      <h3 className="text-sm font-medium">{t.masks.brush.title}</h3>
+      <TouchSlider
+        id="brush-size"
+        value={percent}
+        min={1}
+        max={50}
+        step={1}
+        label={t.masks.brush.size}
+        valueText={`${percent}%`}
+        onChange={(v) => setBrush({ brushSize: v / 100 })}
+        onCommit={() => {}}
+        onReset={() => setBrush({ brushSize: 0.08 })}
+      />
+      <TouchSlider
+        id="brush-feather"
+        value={feather}
+        min={0}
+        max={100}
+        step={1}
+        label={t.masks.brush.feather}
+        valueText={String(feather)}
+        onChange={(v) => setBrush({ brushFeather: v })}
+        onCommit={() => {}}
+        onReset={() => setBrush({ brushFeather: 50 })}
+      />
+      <div className="mt-1 flex items-center gap-2">
+        <Button
+          variant={erase ? 'secondary' : 'outline'}
+          size="sm"
+          aria-pressed={erase}
+          className="flex-1"
+          onClick={() => setBrush({ brushErase: !erase })}
+        >
+          <Eraser />
+          {t.masks.brush.erase}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={mask.strokes.length === 0}
+          onClick={() => {
+            useEditor.getState().updateMask(mask.id, { strokes: [] })
+            useEditor.getState().commit()
+          }}
+        >
+          {t.masks.brush.clear}
+        </Button>
+      </div>
+    </section>
+  )
+}
+
 function Toggle({ label, pressed, onChange }: { label: string; pressed: boolean; onChange: (value: boolean) => void }) {
   return (
     <button

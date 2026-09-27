@@ -142,6 +142,7 @@ uniform vec4 u_maskA[8];       // 曝光（EV）、對比、亮部、陰影（-1
 uniform vec4 u_maskB[8];       // 飽和度、清晰度、紋理、去朦朧（-1..1）
 uniform mat3 u_maskWB[8];      // 局部白平衡
 uniform int u_showMask;        // 要塗紅顯示範圍的遮罩，-1 = 不顯示
+uniform mediump sampler2DArray u_brush; // 筆刷遮罩的範圍，第 i 層 = 第 i 個遮罩
 
 ${COLOR_FUNCTIONS}
 const float TAU = 6.2831853;
@@ -208,12 +209,15 @@ float valueNoise(vec2 x) {
     f.y);
 }
 
-// 線性：起點以前完全套用、終點以後不套用，中間平滑過渡。放射狀：橢圓內套用，羽化決定邊緣多軟
-float maskWeight(int i, vec2 px) {
+// 線性：起點以前完全套用、終點以後不套用，中間平滑過渡。放射狀：橢圓內套用，羽化決定邊緣多軟。
+// 筆刷：畫出來的範圍（貼圖）
+float maskWeight(int i, vec2 px, vec2 uv) {
   vec4 shape = u_maskShape[i];
   vec4 info = u_maskInfo[i];
   float w;
-  if (info.x < 0.5) {
+  if (info.x > 1.5) {
+    w = texture(u_brush, vec3(uv, info.w)).r;
+  } else if (info.x < 0.5) {
     vec2 a = shape.xy * u_sourceSize;
     vec2 d = shape.zw * u_sourceSize - a;
     float along = dot(px - a, d) / max(dot(d, d), 1e-6);
@@ -247,7 +251,7 @@ void main() {
   vec2 px = imageUv * u_sourceSize;
   for (int i = 0; i < 8; i++) {
     if (i >= u_maskCount) break;
-    float w = maskWeight(i, px);
+    float w = maskWeight(i, px, imageUv);
     maskWeights[i] = w;
     exposure += w * u_maskA[i].x;
     contrast += w * u_maskA[i].y;
