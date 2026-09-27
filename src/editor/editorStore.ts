@@ -2,15 +2,22 @@ import { create } from 'zustand'
 import {
   DEFAULT_ADJUSTMENTS,
   clampAdjustment,
+  normalizeCurvePoints,
   sameAdjustments,
-  type AdjustmentKey,
   type Adjustments,
+  type CurveChannel,
+  type CurvePoint,
+  type ScalarKey,
 } from '@/engine/adjustments'
+import type { Histogram } from '@/engine/renderer'
 
 export interface Photo {
   file: Blob
   name: string
   preview: ImageBitmap
+  // 原圖（轉正後）的尺寸
+  width: number
+  height: number
 }
 
 const HISTORY_LIMIT = 100
@@ -25,7 +32,9 @@ interface EditorState {
   future: Adjustments[]
 
   openPhoto: (photo: Photo, adjustments?: Adjustments) => void
-  setAdjustment: (key: AdjustmentKey, value: number) => void
+  setAdjustment: (key: ScalarKey, value: number) => void
+  // 點曲線即時更新（拖曳中），放開後一樣呼叫 commit()
+  setCurve: (channel: CurveChannel, points: CurvePoint[]) => void
   commit: () => void
   apply: (adjustments: Adjustments) => void
   undo: () => void
@@ -46,6 +55,12 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   setAdjustment: (key, value) => {
     set((s) => ({ adjustments: { ...s.adjustments, [key]: clampAdjustment(key, value) } }))
+  },
+
+  setCurve: (channel, points) => {
+    set((s) => ({
+      adjustments: { ...s.adjustments, curve: { ...s.adjustments.curve, [channel]: normalizeCurvePoints(points) } },
+    }))
   },
 
   commit: () => {
@@ -75,13 +90,22 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 }))
 
-// 按住比較時顯示原圖；只是畫面狀態，不進 undo 歷史
+// 只是畫面狀態，不進 undo 歷史
 interface ViewState {
+  // 按住比較時顯示原圖
   showOriginal: boolean
+  showHistogram: boolean
+  histogram: Histogram | null
   setShowOriginal: (value: boolean) => void
+  toggleHistogram: () => void
+  setHistogram: (histogram: Histogram | null) => void
 }
 
 export const useView = create<ViewState>((set) => ({
   showOriginal: false,
+  showHistogram: true,
+  histogram: null,
   setShowOriginal: (showOriginal) => set({ showOriginal }),
+  toggleHistogram: () => set((s) => ({ showHistogram: !s.showHistogram })),
+  setHistogram: (histogram) => set({ histogram }),
 }))

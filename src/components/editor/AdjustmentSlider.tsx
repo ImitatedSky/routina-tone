@@ -9,9 +9,12 @@ interface Props {
   track?: string
 }
 
+// 小數位數跟著滑桿的 step；只有能往負的滑桿才顯示 + 號
 function formatValue(key: AdjustmentKey, value: number) {
-  const text = key === 'exposure' ? value.toFixed(2) : String(Math.round(value))
-  return value > 0 ? `+${text}` : text
+  const { step, min } = ADJUSTMENT_RANGES[key]
+  const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2
+  const text = value.toFixed(decimals)
+  return min < 0 && value > 0 ? `+${text}` : text
 }
 
 // 雙擊可歸零；放開才提交，一次拖曳只算一步 undo

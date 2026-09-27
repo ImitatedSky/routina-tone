@@ -1,17 +1,86 @@
 import * as twgl from 'twgl.js'
 import type { Adjustments } from './adjustments'
+import { buildCurveLut } from './curves'
+import { gradingUniforms, mixerUniforms } from './grading'
+import { estimateHaze } from './haze'
+import { BLUR_SHADER, DEVELOP_SHADER, LUMA_DOWN_SHADER, VERTEX_SHADER } from './shaders'
 import { whiteBalanceMatrix } from './whiteBalance'
-import { FRAGMENT_SHADER, VERTEX_SHADER } from './shaders'
 
 export class RendererError extends Error {}
 
-// 把一張照片畫到 canvas 上並套用調整。預覽和匯出各用一個實例。
+// 模糊半徑都以「照片長邊」的比例定義，預覽和匯出看起來才會一樣
+const TEXTURE_SIGMA = 0.0025
+const CLARITY_SIGMA = 0.012
+// 去霧分析用的縮圖長邊
+const HAZE_SIZE = 512
+// 模糊前先縮小到 sigma 不超過這個值，大半徑的模糊才不會太慢
+const MAX_BLUR_SIGMA = 6
+const CURVE_LUT_SIZE = 1024
+const HISTOGRAM_WIDTH = 256
+
+export interface Region {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface ImageSize {
+  width: number
+  height: number
+}
+
+export interface Histogram {
+  red: Uint32Array
+  green: Uint32Array
+  blue: Uint32Array
+  max: number
+}
+
+interface Target {
+  texture: WebGLTexture
+  framebuffer: WebGLFramebuffer
+  width: number
+  height: number
+}
+
+// 分塊匯出時，每塊要多讀進來的邊（原圖像素），邊緣的模糊才會和整張一起算時一樣
+export function tileMargin(adj: Adjustments, image: ImageSize): number {
+  const longEdge = Math.max(image.width, image.height)
+  return Math.ceil(3 * Math.max(TEXTURE_SIGMA * longEdge, adj.sharpenRadius)) + 4
+}
+
+/**
+ * 把照片畫到 canvas 上並套用調整。預覽和匯出各用一個實例。
+ *
+ * 兩種輸入：
+ * - 分析圖（setAnalysis）：整張照片的縮圖，算大範圍的東西——清晰度的模糊底圖、去霧的暗通道。
+ *   預覽和匯出都用同樣大小的縮圖，結果才一致。
+ * - 目標（setTarget）：真的要畫出來的像素。預覽時是整張縮圖；匯出時是原圖的一塊。
+ */
 export class Renderer {
   private readonly canvas: HTMLCanvasElement
   private readonly gl: WebGL2RenderingContext
-  private readonly program: twgl.ProgramInfo
+  private readonly develop: twgl.ProgramInfo
+  private readonly lumaDown: twgl.ProgramInfo
+  private readonly blur: twgl.ProgramInfo
   private readonly triangle: twgl.BufferInfo
-  private texture: WebGLTexture | null = null
+  private readonly curves: WebGLTexture
+
+  private clarityBase: Target | null = null
+  private haze: WebGLTexture | null = null
+  private atmosphere: [number, number, number] = [1, 1, 1]
+
+  private image: WebGLTexture | null = null
+  private textureBase: Target | null = null
+  private sharpenBase: Target | null = null
+  private sharpenRadius = -1
+  private region: Region = { x: 0, y: 0, width: 1, height: 1 }
+  private imageSize: ImageSize = { width: 1, height: 1 }
+  private targetWidth = 1
+  private targetHeight = 1
+
+  private histogramTarget: Target | null = null
 
   constructor(canvas: HTMLCanvasElement, options: { preserveDrawingBuffer?: boolean } = {}) {
     this.canvas = canvas
@@ -22,10 +91,24 @@ export class Renderer {
     })
     if (!gl) throw new RendererError('這個瀏覽器不支援 WebGL2，無法調色')
     this.gl = gl
-    this.program = twgl.createProgramInfo(gl, [VERTEX_SHADER, FRAGMENT_SHADER])
-    // 一個蓋住整個畫面的大三角形，比兩個三角形少一條對角線接縫
+    this.develop = twgl.createProgramInfo(gl, [VERTEX_SHADER, DEVELOP_SHADER])
+    this.lumaDown = twgl.createProgramInfo(gl, [VERTEX_SHADER, LUMA_DOWN_SHADER])
+    this.blur = twgl.createProgramInfo(gl, [VERTEX_SHADER, BLUR_SHADER])
+    // 一個蓋住整個畫面的大三角形
     this.triangle = twgl.createBufferInfoFromArrays(gl, {
       a_position: { numComponents: 2, data: [-1, -1, 3, -1, -1, 3] },
+    })
+    this.curves = twgl.createTexture(gl, {
+      width: CURVE_LUT_SIZE,
+      height: 4,
+      internalFormat: gl.R16F,
+      format: gl.RED,
+      type: gl.FLOAT,
+      src: new Float32Array(CURVE_LUT_SIZE * 4),
+      min: gl.LINEAR,
+      mag: gl.LINEAR,
+      wrap: gl.CLAMP_TO_EDGE,
+      auto: false,
     })
   }
 
@@ -33,32 +116,107 @@ export class Renderer {
     return this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE) as number
   }
 
-  setImage(image: ImageBitmap) {
+  setAnalysis(analysis: ImageBitmap) {
     const { gl } = this
-    if (this.texture) gl.deleteTexture(this.texture)
-    this.texture = twgl.createTexture(gl, {
-      src: image,
+    const source = this.uploadImage(analysis)
+    this.deleteTarget(this.clarityBase)
+    this.clarityBase = this.blurLuma(
+      source,
+      analysis.width,
+      analysis.height,
+      CLARITY_SIGMA * Math.max(analysis.width, analysis.height),
+    )
+    gl.deleteTexture(source)
+
+    const estimate = estimateHazeFrom(analysis)
+    this.atmosphere = estimate.atmosphere
+    if (this.haze) gl.deleteTexture(this.haze)
+    const bytes = new Uint8Array(estimate.dark.length)
+    estimate.dark.forEach((v, i) => (bytes[i] = Math.round(v * 255)))
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+    this.haze = twgl.createTexture(gl, {
+      width: estimate.width,
+      height: estimate.height,
+      internalFormat: gl.R8,
+      format: gl.RED,
+      type: gl.UNSIGNED_BYTE,
+      src: bytes,
       min: gl.LINEAR,
       mag: gl.LINEAR,
       wrap: gl.CLAMP_TO_EDGE,
       auto: false,
     })
-    this.canvas.width = image.width
-    this.canvas.height = image.height
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
+  }
+
+  // region 是這塊像素在原圖中的位置（原圖像素），image 是原圖尺寸
+  setTarget(bitmap: ImageBitmap, region: Region, image: ImageSize) {
+    const { gl } = this
+    if (this.image) gl.deleteTexture(this.image)
+    this.image = this.uploadImage(bitmap)
+    this.region = {
+      x: region.x / image.width,
+      y: region.y / image.height,
+      width: region.width / image.width,
+      height: region.height / image.height,
+    }
+    this.imageSize = image
+    this.targetWidth = bitmap.width
+    this.targetHeight = bitmap.height
+
+    // 目標像素對原圖像素的比例：預覽是縮圖所以 < 1，匯出是 1
+    const scale = bitmap.width / region.width
+    this.deleteTarget(this.textureBase)
+    this.textureBase = this.blurLuma(
+      this.image,
+      bitmap.width,
+      bitmap.height,
+      TEXTURE_SIGMA * Math.max(image.width, image.height) * scale,
+    )
+    this.deleteTarget(this.sharpenBase)
+    this.sharpenBase = null
+    this.sharpenRadius = -1
+
+    this.canvas.width = bitmap.width
+    this.canvas.height = bitmap.height
     // 瀏覽器可能因為記憶體限制悄悄縮小繪圖緩衝區，這時畫出來的不是原尺寸
-    if (gl.drawingBufferWidth !== image.width || gl.drawingBufferHeight !== image.height) {
-      throw new RendererError(`圖片太大（${image.width}×${image.height}），瀏覽器無法處理`)
+    if (gl.drawingBufferWidth !== bitmap.width || gl.drawingBufferHeight !== bitmap.height) {
+      throw new RendererError(`圖片太大（${bitmap.width}×${bitmap.height}），瀏覽器無法處理`)
     }
   }
 
   render(adj: Adjustments) {
-    if (!this.texture) return
+    if (!this.image || !this.textureBase || !this.clarityBase || !this.haze) return
     const { gl } = this
+
+    // 銳化半徑是滑桿，變了才重算
+    if (!this.sharpenBase || this.sharpenRadius !== adj.sharpenRadius) {
+      this.deleteTarget(this.sharpenBase)
+      const scale = this.targetWidth / (this.region.width * this.imageSize.width)
+      this.sharpenBase = this.blurLuma(this.image, this.targetWidth, this.targetHeight, adj.sharpenRadius * scale)
+      this.sharpenRadius = adj.sharpenRadius
+    }
+
+    const lut = buildCurveLut(adj, CURVE_LUT_SIZE)
+    gl.bindTexture(gl.TEXTURE_2D, this.curves)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, CURVE_LUT_SIZE, 4, gl.RED, gl.FLOAT, lut)
+
+    const grading = gradingUniforms(adj)
+    const mixer = mixerUniforms(adj)
+    const { region, imageSize } = this
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-    gl.useProgram(this.program.program)
-    twgl.setBuffersAndAttributes(gl, this.program, this.triangle)
-    twgl.setUniforms(this.program, {
-      u_image: this.texture,
+    this.draw(this.develop, {
+      u_image: this.image,
+      u_textureBase: this.textureBase.texture,
+      u_sharpenBase: this.sharpenBase.texture,
+      u_clarityBase: this.clarityBase.texture,
+      u_haze: this.haze,
+      u_curves: this.curves,
+      u_region: [region.x, region.y, region.width, region.height],
+      u_imageSize: [imageSize.width, imageSize.height],
+      u_atmosphere: this.atmosphere,
       u_whiteBalance: whiteBalanceMatrix(adj.temp, adj.tint),
       u_exposure: adj.exposure,
       u_contrast: adj.contrast / 100,
@@ -66,18 +224,153 @@ export class Renderer {
       u_shadows: adj.shadows / 100,
       u_whites: adj.whites / 100,
       u_blacks: adj.blacks / 100,
+      u_texture: adj.texture / 100,
+      u_clarity: adj.clarity / 100,
+      u_dehaze: adj.dehaze / 100,
       u_vibrance: adj.vibrance / 100,
       u_saturation: adj.saturation / 100,
+      u_sharpenAmount: adj.sharpenAmount / 100,
+      u_sharpenMasking: adj.sharpenMasking / 100,
+      u_hue: mixer.hue,
+      u_sat: mixer.sat,
+      u_lum: mixer.lum,
+      u_gradeShadow: grading.shadow,
+      u_gradeMidtone: grading.midtone,
+      u_gradeHighlight: grading.highlight,
+      u_gradeGlobal: grading.global,
+      u_gradePivot: grading.pivot,
+      u_gradeBlend: grading.blend,
+      u_vignette: [
+        adj.vignetteAmount / 100,
+        adj.vignetteMidpoint / 100,
+        adj.vignetteFeather / 100,
+        adj.vignetteRoundness / 100,
+      ],
+      u_grain: [adj.grainAmount / 100, 1 + (adj.grainSize / 100) * 4, adj.grainRoughness / 100],
     })
-    twgl.drawBufferInfo(gl, this.triangle)
+  }
+
+  // 必須在 render() 之後、同一個 JS 工作裡呼叫（繪圖緩衝區還沒被瀏覽器清掉）
+  readHistogram(): Histogram {
+    const { gl } = this
+    const width = Math.min(HISTOGRAM_WIDTH, gl.drawingBufferWidth)
+    const height = Math.max(1, Math.round((gl.drawingBufferHeight * width) / gl.drawingBufferWidth))
+    if (!this.histogramTarget || this.histogramTarget.width !== width || this.histogramTarget.height !== height) {
+      this.deleteTarget(this.histogramTarget)
+      this.histogramTarget = this.createTarget(width, height)
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.histogramTarget.framebuffer)
+    gl.blitFramebuffer(
+      0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight,
+      0, 0, width, height,
+      gl.COLOR_BUFFER_BIT, gl.LINEAR,
+    )
+    const pixels = new Uint8Array(width * height * 4)
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.histogramTarget.framebuffer)
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+    const red = new Uint32Array(256)
+    const green = new Uint32Array(256)
+    const blue = new Uint32Array(256)
+    for (let i = 0; i < pixels.length; i += 4) {
+      red[pixels[i]]++
+      green[pixels[i + 1]]++
+      blue[pixels[i + 2]]++
+    }
+    // 最高的柱子常常是純黑或純白的一大片，拿它來當刻度會把其他部分壓扁
+    let max = 1
+    for (let i = 1; i < 255; i++) max = Math.max(max, red[i], green[i], blue[i])
+    return { red, green, blue, max }
   }
 
   dispose() {
-    if (this.texture) this.gl.deleteTexture(this.texture)
-    this.texture = null
+    const { gl } = this
+    for (const t of [this.image, this.haze, this.curves]) if (t) gl.deleteTexture(t)
+    for (const t of [this.clarityBase, this.textureBase, this.sharpenBase, this.histogramTarget]) this.deleteTarget(t)
+    this.image = null
     // 主動釋放 GPU 記憶體，不等 GC（匯出時的全尺寸貼圖很大）
-    this.gl.getExtension('WEBGL_lose_context')?.loseContext()
+    gl.getExtension('WEBGL_lose_context')?.loseContext()
   }
+
+  private uploadImage(bitmap: ImageBitmap): WebGLTexture {
+    const { gl } = this
+    return twgl.createTexture(gl, {
+      src: bitmap,
+      min: gl.LINEAR,
+      mag: gl.LINEAR,
+      wrap: gl.CLAMP_TO_EDGE,
+      auto: false,
+    })
+  }
+
+  private createTarget(width: number, height: number): Target {
+    const { gl } = this
+    const texture = twgl.createTexture(gl, {
+      width,
+      height,
+      min: gl.LINEAR,
+      mag: gl.LINEAR,
+      wrap: gl.CLAMP_TO_EDGE,
+      auto: false,
+    })
+    const framebuffer = gl.createFramebuffer()!
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    return { texture, framebuffer, width, height }
+  }
+
+  private deleteTarget(target: Target | null) {
+    if (!target) return
+    this.gl.deleteTexture(target.texture)
+    this.gl.deleteFramebuffer(target.framebuffer)
+  }
+
+  private draw(program: twgl.ProgramInfo, uniforms: Record<string, unknown>, target?: Target) {
+    const { gl } = this
+    if (target) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer)
+      gl.viewport(0, 0, target.width, target.height)
+    }
+    gl.useProgram(program.program)
+    twgl.setBuffersAndAttributes(gl, program, this.triangle)
+    twgl.setUniforms(program, { ...uniforms, u_flipY: target ? 0 : 1 })
+    twgl.drawBufferInfo(gl, this.triangle)
+    if (target) gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+  }
+
+  // 亮度的高斯模糊。sigma 大時先縮小再模糊（大範圍模糊只剩低頻，縮小不會失真）
+  private blurLuma(source: WebGLTexture, width: number, height: number, sigma: number): Target {
+    let factor = 1
+    while (sigma / factor > MAX_BLUR_SIGMA && factor < 16) factor *= 2
+    const w = Math.max(1, Math.ceil(width / factor))
+    const h = Math.max(1, Math.ceil(height / factor))
+    const result = this.createTarget(w, h)
+    this.draw(this.lumaDown, { u_src: source, u_srcSize: [width, height], u_factor: factor }, result)
+
+    const s = sigma / factor
+    if (s >= 0.3) {
+      const temp = this.createTarget(w, h)
+      this.draw(this.blur, { u_src: result.texture, u_step: [1 / w, 0], u_sigma: s }, temp)
+      this.draw(this.blur, { u_src: temp.texture, u_step: [0, 1 / h], u_sigma: s }, result)
+      this.deleteTarget(temp)
+    }
+    return result
+  }
+}
+
+function estimateHazeFrom(bitmap: ImageBitmap) {
+  const scale = Math.min(1, HAZE_SIZE / Math.max(bitmap.width, bitmap.height))
+  const width = Math.max(1, Math.round(bitmap.width * scale))
+  const height = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  ctx.drawImage(bitmap, 0, 0, width, height)
+  return estimateHaze(ctx.getImageData(0, 0, width, height).data, width, height)
 }
 
 export function supportsWebGL2(): boolean {

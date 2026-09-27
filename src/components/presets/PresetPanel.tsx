@@ -8,6 +8,7 @@ import { useEditor } from '@/editor/editorStore'
 import { safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
 import { PRESET_EXTENSION, parsePresetFile, serializePreset } from '@/presets/presetFile'
+import { parseXmpPreset } from '@/presets/xmp'
 import { addPreset, deletePreset, listPresets, putPreset, type Preset } from '@/storage/db'
 
 export function PresetPanel() {
@@ -59,8 +60,17 @@ export function PresetPanel() {
     let imported = 0
     for (const file of Array.from(files)) {
       try {
-        const { name: presetName, adjustments } = parsePresetFile(await file.text())
-        await addPreset(presetName, adjustments)
+        const text = await file.text()
+        if (/\.xmp$/i.test(file.name)) {
+          const { name: presetName, adjustments, warnings } = parseXmpPreset(text, file.name)
+          await addPreset(presetName, adjustments)
+          if (warnings.length > 0) {
+            toast.warning(`「${presetName}」有部分內容無法套用`, { description: warnings.join('、') })
+          }
+        } else {
+          const { name: presetName, adjustments } = parsePresetFile(text)
+          await addPreset(presetName, adjustments)
+        }
         imported++
       } catch (error) {
         toast.error(`${file.name}：${error instanceof Error ? error.message : '無法匯入'}`)
@@ -90,12 +100,12 @@ export function PresetPanel() {
 
       <Button variant="outline" size="sm" className="w-full" onClick={() => importRef.current?.click()}>
         <FileUp />
-        匯入預設集（.tone.json）
+        匯入預設集（.tone.json 或 Lightroom .xmp）
       </Button>
       <input
         ref={importRef}
         type="file"
-        accept=".json,application/json"
+        accept=".json,.xmp,application/json,application/rdf+xml"
         multiple
         hidden
         onChange={(e) => {

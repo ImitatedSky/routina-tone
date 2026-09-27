@@ -10,7 +10,7 @@ export function EmptyState() {
         開啟照片
       </OpenPhotoButton>
       <p className="text-xs text-muted-foreground">
-        支援 JPEG、PNG、WebP<span className="hidden md:inline">，也可以直接把檔案拖進來</span>
+        支援 JPEG、PNG、WebP、HEIC<span className="hidden md:inline">，也可以直接把檔案拖進來</span>
       </p>
     </main>
   )

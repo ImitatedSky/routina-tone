@@ -20,3 +20,28 @@ export const PRESENCE_SLIDERS: SliderDef[] = [
   { key: 'vibrance', label: '自然飽和度', track: SATURATION_TRACK },
   { key: 'saturation', label: '飽和度', track: SATURATION_TRACK },
 ]
+
+export const PRESENCE_EFFECT_SLIDERS: SliderDef[] = [
+  { key: 'texture', label: '紋理' },
+  { key: 'clarity', label: '清晰度' },
+  { key: 'dehaze', label: '去朦朧' },
+]
+
+export const SHARPEN_SLIDERS: SliderDef[] = [
+  { key: 'sharpenAmount', label: '總量' },
+  { key: 'sharpenRadius', label: '半徑' },
+  { key: 'sharpenMasking', label: '遮色片' },
+]
+
+export const VIGNETTE_SLIDERS: SliderDef[] = [
+  { key: 'vignetteAmount', label: '總量', track: 'linear-gradient(to right, #111, #777, #eee)' },
+  { key: 'vignetteMidpoint', label: '中點' },
+  { key: 'vignetteFeather', label: '羽化' },
+  { key: 'vignetteRoundness', label: '圓度' },
+]
+
+export const GRAIN_SLIDERS: SliderDef[] = [
+  { key: 'grainAmount', label: '總量' },
+  { key: 'grainSize', label: '大小' },
+  { key: 'grainRoughness', label: '粗糙度' },
+]

@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
-import { normalizeAdjustments, diffFromDefaults, type Adjustments } from '@/engine/adjustments'
+import { normalizeAdjustments, diffFromDefaults, type Adjustments, type AdjustmentsPatch } from '@/engine/adjustments'
 
 export interface Preset {
   id: string
@@ -19,7 +19,7 @@ export interface Session {
 interface StoredPreset {
   id: string
   name: string
-  adjustments: Partial<Adjustments>
+  adjustments: AdjustmentsPatch
   createdAt: number
 }
 
@@ -31,7 +31,7 @@ interface StoredPhoto {
 // 照片和參數分開存：拖一次滑桿只要寫參數，不用每次都重寫整張照片
 interface ToneDB extends DBSchema {
   presets: { key: string; value: StoredPreset }
-  session: { key: 'photo' | 'adjustments'; value: StoredPhoto | Partial<Adjustments> }
+  session: { key: 'photo' | 'adjustments'; value: StoredPhoto | AdjustmentsPatch }
 }
 
 let dbPromise: Promise<IDBPDatabase<ToneDB>> | null = null

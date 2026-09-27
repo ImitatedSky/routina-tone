@@ -1,4 +1,4 @@
-import { diffFromDefaults, normalizeAdjustments, type Adjustments } from '@/engine/adjustments'
+import { diffFromDefaults, normalizeAdjustments, type Adjustments, type AdjustmentsPatch } from '@/engine/adjustments'
 
 export const PRESET_FORMAT = 'routina-tone-preset'
 export const PRESET_VERSION = 1
@@ -9,7 +9,7 @@ export interface PresetFile {
   format: typeof PRESET_FORMAT
   version: number
   name: string
-  adjustments: Partial<Adjustments>
+  adjustments: AdjustmentsPatch
 }
 
 export class PresetFileError extends Error {}

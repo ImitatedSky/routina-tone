@@ -4,14 +4,18 @@
 
 Android 版是 Routina 家族的一員，從 Routina Hub 安裝，或到 [Releases](https://github.com/ImitatedSky/routina-tone/releases) 下載 `routina-tone-v*.apk`。規劃與版本路線見 [PLAN.md](PLAN.md)。
 
-## 功能（v0.1）
+## 功能
 
-- 白平衡：色溫、色調
-- 色調：曝光、對比、亮部、陰影、白色、黑色
-- 飽和度：自然飽和度、飽和度
-- 按住照片（或眼睛按鈕）看原圖；雙擊滑桿歸零；Ctrl+Z / Ctrl+Shift+Z
-- 以原始尺寸匯出 JPEG
-- 預設集：儲存、匯出成 `.tone.json`、匯入
+- **光線**：曝光、對比、亮部、陰影、白色、黑色
+- **色彩**：色溫、色調、自然飽和度、飽和度
+- **曲線**：RGB／紅／綠／藍點曲線，加上參數式區域曲線（亮部、亮調、暗調、陰影與三個分界點）
+- **混色器**：8 個色帶的色相／飽和度／明度（在 OKLCH 裡調，改色相時亮度不跳）
+- **色彩分級**：陰影／中間調／亮部／全局四個色輪，加上混合與平衡
+- **效果**：紋理、清晰度、去朦朧、銳利化（總量／半徑／遮色片）、暗角、顆粒
+- RGB 直方圖；按住照片看原圖；雙擊滑桿歸零；Ctrl+Z / Ctrl+Shift+Z
+- 以原始尺寸匯出 JPEG，大圖分塊渲染，不受 GPU 貼圖上限限制
+- 開 JPEG、PNG、WebP、HEIC（HEIC 在瀏覽器不支援時才載入 WASM 解碼器）
+- 預設集：儲存、匯出成 `.tone.json`、匯入 `.tone.json` 或 Lightroom `.xmp`
 - 重新整理後自動還原上次編輯的照片與參數
 
 ## 開發
@@ -27,12 +31,12 @@ npm run build
 
 | 目錄 | 內容 |
 |---|---|
-| `src/engine/` | 參數定義、白平衡矩陣（TS 算）、GLSL shader、WebGL2 renderer |
-| `src/photo/` | 解碼（依 EXIF 轉正、縮預覽圖）、匯出 JPEG |
-| `src/presets/` | 預設集檔案格式 |
+| `src/engine/` | 參數定義、白平衡／曲線 LUT／分級與混色的數值（TS 算）、去霧分析、GLSL shader、WebGL2 renderer |
+| `src/photo/` | 解碼（依 EXIF 轉正、縮預覽圖、HEIC）、分塊匯出 JPEG |
+| `src/presets/` | 預設集檔案格式、Lightroom .xmp 匯入 |
 | `src/storage/` | IndexedDB：預設集、目前的編輯 |
 | `src/editor/` | 編輯狀態（zustand，含 undo/redo） |
-| `src/components/` | 介面 |
+| `src/components/` | 介面（`panels/` 是曲線、混色器、色彩分級） |
 
 ### Android 殼（`android/`）
 
@@ -63,3 +67,18 @@ cd android && ./gradlew :app:assembleRelease
 ```
 
 `adjustments` 只存和預設值不同的欄位，讀取時補預設值、夾在範圍內、忽略不認得的欄位。參數單位和 Lightroom 一致（曝光是 EV，其他是 -100..100）。
+
+### 渲染管線
+
+- **分析圖**（和預覽同尺寸的縮圖）：清晰度的大範圍模糊底圖、去霧的暗通道與大氣光（CPU 上算，guided filter 修邊）。預覽與匯出用同一種縮圖，結果一致。
+- **目標**（預覽的整張縮圖，或匯出時原圖的一塊）：紋理與銳利化的模糊底圖，依目標實際解析度算。
+- **調色 pass**：一個 fragment shader 依序做完所有調整，順序見 `src/engine/shaders.ts` 開頭的說明。
+- 模糊半徑都以照片長邊的比例定義，所以預覽和匯出看起來一樣；分塊匯出時每塊多讀一圈邊，接縫處和整張一起算時相同。
+
+### Lightroom .xmp
+
+參數名稱可以一對一對應（`src/presets/xmp.ts`），但 Adobe 的算法沒公開，套出來只會接近、不會完全一樣。描述檔（Look）、遮罩、相機描述檔、裁切、鏡頭校正會略過並提示。
+
+## 第三方授權
+
+HEIC 解碼使用 [libheif-js](https://github.com/catdad-experiments/libheif-js)（內含 libheif 與 libde265），授權為 LGPL-3.0。只在開啟 HEIC 且瀏覽器本身不支援時才載入。

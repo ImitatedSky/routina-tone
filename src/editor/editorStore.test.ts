@@ -1,7 +1,7 @@
 import { DEFAULT_ADJUSTMENTS } from '@/engine/adjustments'
 import { useEditor } from './editorStore'
 
-const photo = () => ({ file: new Blob(), name: 'a.jpg', preview: { close() {} } as ImageBitmap })
+const photo = () => ({ file: new Blob(), name: 'a.jpg', preview: { close() {} } as ImageBitmap, width: 1, height: 1 })
 
 beforeEach(() => useEditor.getState().openPhoto(photo()))
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { PREVIEW_MAX_EDGE, decodeImage } from '@/photo/decode'
+import { decodePreview } from '@/photo/decode'
 import { loadSession, saveSessionAdjustments, saveSessionPhoto } from '@/storage/db'
 import { useEditor } from './editorStore'
 
@@ -14,12 +14,12 @@ export function useSessionPersistence(): boolean {
     loadSession()
       .then(async (session) => {
         if (!session || cancelled || useEditor.getState().photo) return
-        const preview = await decodeImage(session.photo, PREVIEW_MAX_EDGE)
+        const decoded = await decodePreview(session.photo)
         if (cancelled) {
-          preview.close()
+          decoded.preview.close()
           return
         }
-        useEditor.getState().openPhoto({ file: session.photo, name: session.photoName, preview }, session.adjustments)
+        useEditor.getState().openPhoto({ file: session.photo, name: session.photoName, ...decoded }, session.adjustments)
       })
       .catch((error) => console.warn('restore session failed', error))
       .finally(() => {
