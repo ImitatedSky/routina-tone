@@ -1,5 +1,6 @@
 import { DEFAULT_ADJUSTMENTS, applyStyle, withoutGeometry } from './adjustments'
 import {
+  invertAffine,
   isValidCrop,
   largestCrop,
   limitCrop,
@@ -98,5 +99,14 @@ describe('presets and geometry', () => {
     expect(result.cropW).toBe(0.5)
     expect(result.straighten).toBe(5)
     expect(withoutGeometry(current).cropW).toBe(1)
+  })
+})
+
+describe('invertAffine', () => {
+  it('undoes the output-to-source mapping', () => {
+    const m = outputToSource(adj({ straighten: 12, rotation: 1, flipH: 1, cropX: 0.1, cropW: 0.6 }), image)
+    const inv = invertAffine(m)
+    const [sx, sy] = mapPoint(m, 0.3, 0.7)
+    expectPoint(mapPoint(inv, sx, sy), [0.3, 0.7])
   })
 })

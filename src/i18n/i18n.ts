@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { common } from './messages/common'
 import { editor } from './messages/editor'
+import { masks } from './messages/masks'
 import { panels } from './messages/panels'
 import { photo } from './messages/photo'
 import { presets } from './messages/presets'
@@ -11,7 +12,7 @@ import { presets } from './messages/presets'
 export type Locale = 'zh-Hant' | 'en'
 export type LanguagePref = 'system' | Locale
 
-const NAMESPACES = { common, editor, panels, photo, presets }
+const NAMESPACES = { common, editor, masks, panels, photo, presets }
 
 export type Messages = { [K in keyof typeof NAMESPACES]: (typeof NAMESPACES)[K]['zh-Hant'] }
 

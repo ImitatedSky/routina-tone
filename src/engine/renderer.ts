@@ -5,6 +5,7 @@ import { buildCurveLut } from './curves'
 import { gradingUniforms, mixerUniforms } from './grading'
 import { FULL_CROP, outputSize, outputToSource, toColumnMajor, type CropRect } from './geometry'
 import { estimateHaze } from './haze'
+import { maskUniforms } from './masks'
 import { BLUR_SHADER, DEVELOP_SHADER, LUMA_DOWN_SHADER, VERTEX_SHADER } from './shaders'
 import { whiteBalanceMatrix } from './whiteBalance'
 
@@ -185,7 +186,7 @@ export class Renderer {
    * - crop：另外指定裁切框（裁切模式時傳整個畫框，讓使用者看到整張轉正後的照片）
    * - outRegion：要畫輸出的哪一塊（0..1）；分塊匯出時才用，預覽是整張
    */
-  render(adj: Adjustments, options: { crop?: CropRect; outRegion?: CropRect } = {}) {
+  render(adj: Adjustments, options: { crop?: CropRect; outRegion?: CropRect; showMask?: number } = {}) {
     if (!this.image || !this.textureBase || !this.clarityBase || !this.haze) return
     const { gl } = this
     const crop = options.crop
@@ -215,6 +216,7 @@ export class Renderer {
     gl.bindTexture(gl.TEXTURE_2D, this.curves)
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, CURVE_LUT_SIZE, 4, gl.RED, gl.FLOAT, lut)
 
+    const masks = maskUniforms(adj.masks)
     const grading = gradingUniforms(adj)
     const mixer = mixerUniforms(adj)
     const { region } = this
@@ -232,6 +234,14 @@ export class Renderer {
       u_geometry: toColumnMajor(outputToSource(adj, this.imageSize, crop)),
       u_outRegion: [outRegion.x, outRegion.y, outRegion.w, outRegion.h],
       u_outputSize: [output.width, output.height],
+      u_sourceSize: [this.imageSize.width, this.imageSize.height],
+      u_maskCount: masks.count,
+      u_maskShape: masks.shape,
+      u_maskInfo: masks.info,
+      u_maskA: masks.a,
+      u_maskB: masks.b,
+      u_maskWB: masks.whiteBalance,
+      u_showMask: options.showMask ?? -1,
       u_atmosphere: this.atmosphere,
       u_whiteBalance: whiteBalanceMatrix(adj.temp, adj.tint),
       u_exposure: adj.exposure,

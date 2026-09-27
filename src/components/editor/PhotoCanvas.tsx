@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { CropOverlay } from '@/components/crop/CropOverlay'
+import { MaskOverlay } from '@/components/masks/MaskOverlay'
 import { DEFAULT_ADJUSTMENTS, applyStyle, type Adjustments } from '@/engine/adjustments'
 import { FULL_CROP } from '@/engine/geometry'
 import { Renderer, supportsWebGL2 } from '@/engine/renderer'
@@ -18,11 +19,24 @@ interface Box {
   height: number
 }
 
-// 看原圖時只拿掉調色，裁切與拉直保留，比較的才是同一個畫面
-function draw(renderer: Renderer, adjustments: Adjustments, showOriginal: boolean, cropMode: boolean) {
-  const adj = showOriginal ? applyStyle(adjustments, DEFAULT_ADJUSTMENTS) : adjustments
+interface DrawView {
+  showOriginal: boolean
+  cropMode: boolean
+  // 要塗紅顯示範圍的遮罩位置，-1 = 不顯示
+  showMask: number
+}
+
+// 看原圖時拿掉調色與遮罩，裁切與拉直保留，比較的才是同一個畫面
+function draw(renderer: Renderer, adjustments: Adjustments, view: DrawView) {
+  const adj = view.showOriginal ? { ...applyStyle(adjustments, DEFAULT_ADJUSTMENTS), masks: [] } : adjustments
   // 裁切模式畫整個畫框，裁切框另外疊在上面
-  renderer.render(adj, cropMode ? { crop: FULL_CROP } : {})
+  renderer.render(adj, { crop: view.cropMode ? FULL_CROP : undefined, showMask: view.showOriginal ? -1 : view.showMask })
+}
+
+function currentView(adjustments: Adjustments): DrawView {
+  const v = useView.getState()
+  const index = v.maskMode && v.showMask ? adjustments.masks.findIndex((m) => m.id === v.selectedMask) : -1
+  return { showOriginal: v.showOriginal, cropMode: v.cropMode, showMask: index }
 }
 
 export function PhotoCanvas() {
@@ -41,6 +55,9 @@ export function PhotoCanvas() {
   const setShowOriginal = useView((s) => s.setShowOriginal)
   const showHistogram = useView((s) => s.showHistogram)
   const cropMode = useView((s) => s.cropMode)
+  const maskMode = useView((s) => s.maskMode)
+  const showMask = useView((s) => s.showMask)
+  const selectedMask = useView((s) => s.selectedMask)
 
   // canvas 每次掛載都重新建立：WebGL context 釋放後同一個 canvas 就不能再用了
   useEffect(() => {
@@ -86,7 +103,7 @@ export function PhotoCanvas() {
     const renderer = rendererRef.current
     if (!renderer) return
     try {
-      draw(renderer, adjustments, showOriginal, cropMode)
+      draw(renderer, adjustments, currentView(adjustments))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
       return
@@ -102,17 +119,17 @@ export function PhotoCanvas() {
       setHistogram(renderer.readHistogram())
     } else {
       histogramTimerRef.current = window.setTimeout(() => {
-        const view = useView.getState()
-        draw(renderer, useEditor.getState().adjustments, view.showOriginal, view.cropMode)
+        const latest = useEditor.getState().adjustments
+        draw(renderer, latest, currentView(latest))
         lastHistogramRef.current = performance.now()
         setHistogram(renderer.readHistogram())
       }, HISTOGRAM_INTERVAL)
     }
-  }, [photo, adjustments, showOriginal, showHistogram, cropMode])
+  }, [photo, adjustments, showOriginal, showHistogram, cropMode, maskMode, showMask, selectedMask])
 
   const hideOriginal = () => setShowOriginal(false)
-  // 裁切時手指是在拖裁切框，不是在比較原圖
-  const compareHandlers = cropMode
+  // 裁切、調遮罩時手指是在拖把手，不是在比較原圖
+  const compareHandlers = cropMode || maskMode
     ? {}
     : {
         onPointerDown: () => setShowOriginal(true),
@@ -131,6 +148,7 @@ export function PhotoCanvas() {
         onContextMenu={(e) => e.preventDefault()}
       />
       {cropMode && photo && box && <CropOverlay box={box} />}
+      {maskMode && photo && box && <MaskOverlay box={box} />}
       {showHistogram && !cropMode && <Histogram className="pointer-events-none absolute top-3 right-3" />}
       {showOriginal && (
         <span className="pointer-events-none absolute top-4 left-4 rounded-md bg-black/60 px-2 py-0.5 text-xs text-white">

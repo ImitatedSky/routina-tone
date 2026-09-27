@@ -1,3 +1,5 @@
+import { normalizeMasks, sameMasks, type Mask } from './masks'
+
 // 所有調整參數。名稱與數值單位盡量和 Lightroom 一致（曝光是 EV，大部分是 -100..100），
 // 方便對照與匯入 .xmp。
 
@@ -70,7 +72,8 @@ export const CURVE_CHANNELS = ['rgb', 'red', 'green', 'blue'] as const
 export type CurveChannel = (typeof CURVE_CHANNELS)[number]
 export type ToneCurve = Record<CurveChannel, CurvePoint[]>
 
-export type Adjustments = Record<ScalarKey, number> & { curve: ToneCurve }
+// masks 是局部調整（見 masks.ts）
+export type Adjustments = Record<ScalarKey, number> & { curve: ToneCurve; masks: Mask[] }
 
 export interface Range {
   min: number
@@ -153,18 +156,18 @@ const SPECS = {
   flipH: { min: 0, max: 1, step: 1, default: 0 },
 } as Record<ScalarKey, Spec>
 
-// 幾何設定屬於「這張照片」而不是「風格」，和 Lightroom 一樣不存進預設集，套用預設集時也保留原本的
+// 幾何設定與局部遮罩屬於「這張照片」而不是「風格」，和 Lightroom 一樣不存進預設集，套用預設集時也保留原本的
 export const GEOMETRY_KEYS: ScalarKey[] = ['cropX', 'cropY', 'cropW', 'cropH', 'straighten', 'rotation', 'flipH']
 
 export function withoutGeometry(adj: Adjustments): Adjustments {
-  const result = { ...adj }
+  const result = { ...adj, masks: [] }
   for (const key of GEOMETRY_KEYS) result[key] = SPECS[key].default
   return result
 }
 
-// 套用預設集：風格來自 style，幾何保留 current 的
+// 套用預設集：風格來自 style，幾何與遮罩保留 current 的
 export function applyStyle(current: Adjustments, style: Adjustments): Adjustments {
-  const result = { ...style }
+  const result = { ...style, masks: current.masks }
   for (const key of GEOMETRY_KEYS) result[key] = current[key]
   return result
 }
@@ -190,6 +193,7 @@ export const DEFAULT_CURVE: ToneCurve = {
 export const DEFAULT_ADJUSTMENTS: Adjustments = {
   ...(Object.fromEntries(SCALAR_KEYS.map((k) => [k, SPECS[k].default])) as Record<ScalarKey, number>),
   curve: DEFAULT_CURVE,
+  masks: [],
 }
 
 export function clampAdjustment(key: ScalarKey, value: number): number {
@@ -208,7 +212,8 @@ export function isIdentityCurve(points: CurvePoint[]): boolean {
 export function sameAdjustments(a: Adjustments, b: Adjustments): boolean {
   return (
     SCALAR_KEYS.every((k) => a[k] === b[k]) &&
-    CURVE_CHANNELS.every((c) => sameCurvePoints(a.curve[c], b.curve[c]))
+    CURVE_CHANNELS.every((c) => sameCurvePoints(a.curve[c], b.curve[c])) &&
+    sameMasks(a.masks, b.masks)
   )
 }
 
@@ -234,7 +239,7 @@ export function normalizeCurvePoints(input: unknown): CurvePoint[] {
 // 從不可信的資料（預設集檔、IndexedDB）讀參數：只收認得的欄位、數值夾在範圍內，
 // 缺的欄位補預設值。之後新增參數時，舊的資料也能照常讀。
 export function normalizeAdjustments(input: unknown): Adjustments {
-  const result: Adjustments = { ...DEFAULT_ADJUSTMENTS, curve: { ...DEFAULT_CURVE } }
+  const result: Adjustments = { ...DEFAULT_ADJUSTMENTS, curve: { ...DEFAULT_CURVE }, masks: [] }
   if (typeof input !== 'object' || input === null) return result
   const record = input as Record<string, unknown>
   for (const key of SCALAR_KEYS) {
@@ -250,10 +255,11 @@ export function normalizeAdjustments(input: unknown): Adjustments {
       if (points !== undefined) result.curve[channel] = normalizeCurvePoints(points)
     }
   }
+  result.masks = normalizeMasks(record.masks)
   return result
 }
 
-export type AdjustmentsPatch = Partial<Record<ScalarKey, number>> & { curve?: Partial<ToneCurve> }
+export type AdjustmentsPatch = Partial<Record<ScalarKey, number>> & { curve?: Partial<ToneCurve>; masks?: Mask[] }
 
 // 只留下和預設值不同的欄位，存檔用
 export function diffFromDefaults(adj: Adjustments): AdjustmentsPatch {
@@ -266,5 +272,6 @@ export function diffFromDefaults(adj: Adjustments): AdjustmentsPatch {
     if (!isIdentityCurve(adj.curve[channel])) curve[channel] = adj.curve[channel]
   }
   if (Object.keys(curve).length > 0) diff.curve = curve
+  if (adj.masks.length > 0) diff.masks = adj.masks
   return diff
 }

@@ -9,6 +9,7 @@ import {
   type CurvePoint,
   type ScalarKey,
 } from '@/engine/adjustments'
+import { MAX_MASKS, createMask, type Mask, type MaskType } from '@/engine/masks'
 import type { Histogram } from '@/engine/renderer'
 
 export interface Photo {
@@ -37,6 +38,10 @@ interface EditorState {
   setAdjustments: (values: Partial<Record<ScalarKey, number>>) => void
   // 點曲線即時更新（拖曳中），放開後一樣呼叫 commit()
   setCurve: (channel: CurveChannel, points: CurvePoint[]) => void
+  // 局部遮罩。add / remove 直接提交；update 是拖曳中的即時更新，放開後呼叫 commit()
+  addMask: (type: MaskType) => string | null
+  updateMask: (id: string, patch: Partial<Omit<Mask, 'id' | 'type'>>) => void
+  removeMask: (id: string) => void
   commit: () => void
   apply: (adjustments: Adjustments) => void
   undo: () => void
@@ -65,6 +70,30 @@ export const useEditor = create<EditorState>((set, get) => ({
       for (const [key, value] of Object.entries(values) as [ScalarKey, number][]) next[key] = clampAdjustment(key, value)
       return { adjustments: next }
     })
+  },
+
+  addMask: (type) => {
+    const { adjustments, apply } = get()
+    if (adjustments.masks.length >= MAX_MASKS) return null
+    const mask = createMask(type)
+    apply({ ...adjustments, masks: [...adjustments.masks, mask] })
+    return mask.id
+  },
+
+  updateMask: (id, patch) => {
+    set((s) => ({
+      adjustments: {
+        ...s.adjustments,
+        masks: s.adjustments.masks.map((m) =>
+          m.id === id ? { ...m, ...patch, adjust: { ...m.adjust, ...patch.adjust } } : m,
+        ),
+      },
+    }))
+  },
+
+  removeMask: (id) => {
+    const { adjustments, apply } = get()
+    apply({ ...adjustments, masks: adjustments.masks.filter((m) => m.id !== id) })
   },
 
   setCurve: (channel, points) => {
@@ -110,7 +139,14 @@ interface ViewState {
   cropMode: boolean
   // 裁切的長寬比：null = 自由；其他是像素的寬 / 高
   cropAspect: number | null
+  // 在遮罩分頁時顯示遮罩的把手；showMask 會把遮罩範圍塗成紅色
+  maskMode: boolean
+  selectedMask: string | null
+  showMask: boolean
   setShowOriginal: (value: boolean) => void
+  setMaskMode: (value: boolean) => void
+  selectMask: (id: string | null) => void
+  setShowMask: (value: boolean) => void
   setCropMode: (value: boolean) => void
   setCropAspect: (value: number | null) => void
   toggleHistogram: () => void
@@ -123,7 +159,13 @@ export const useView = create<ViewState>((set) => ({
   histogram: null,
   cropMode: false,
   cropAspect: null,
+  maskMode: false,
+  selectedMask: null,
+  showMask: false,
   setShowOriginal: (showOriginal) => set({ showOriginal }),
+  setMaskMode: (maskMode) => set({ maskMode }),
+  selectMask: (selectedMask) => set({ selectedMask }),
+  setShowMask: (showMask) => set({ showMask }),
   setCropMode: (cropMode) => set({ cropMode }),
   setCropAspect: (cropAspect) => set({ cropAspect }),
   toggleHistogram: () => set((s) => ({ showHistogram: !s.showHistogram })),

@@ -97,6 +97,13 @@ export function mapPoint(m: Mat3, x: number, y: number): [number, number] {
   return apply(m, x, y)
 }
 
+// 仿射矩陣（最後一列是 0 0 1）的反矩陣：原圖 uv → 輸出 uv，遮罩把手要畫在畫面上時用
+export function invertAffine(m: Mat3): Mat3 {
+  const [a, b, c, d, e, f] = m
+  const det = a * e - b * d
+  return [e / det, -b / det, (b * f - c * e) / det, -d / det, a / det, (c * d - a * f) / det, 0, 0, 1]
+}
+
 // 輸出上一塊矩形（uv）對應到來源的外接矩形（uv），分塊匯出時決定要讀哪一塊原圖
 export function sourceBounds(m: Mat3, rect: CropRect): CropRect {
   const corners = [

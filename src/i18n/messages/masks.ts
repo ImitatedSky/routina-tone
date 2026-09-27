@@ -1,0 +1,47 @@
+// 局部調整（遮罩）分頁與畫布上的把手
+const zh = {
+  title: '遮罩',
+  addLinear: '新增線性漸層',
+  addRadial: '新增放射狀漸層',
+  full: (max: number) => `最多 ${max} 個遮罩`,
+  empty: '在照片的一部分套用調整，例如壓暗天空或提亮主體。',
+  list: '遮罩列表',
+  name: { linear: (n: number) => `線性 ${n}`, radial: (n: number) => `放射狀 ${n}` },
+  deleteMask: (name: string) => `刪除${name}`,
+  showOverlay: '顯示遮罩範圍',
+  selectHint: '選一個遮罩來調整。',
+  moveHint: {
+    linear: '拖曳兩端的點調整漸層。',
+    radial: '拖曳中心移動，拖曳邊緣的點調整大小。',
+  },
+  feather: '羽化',
+  invert: '反轉',
+  resetAdjust: (name: string) => `重設${name}的調整`,
+  groups: { light: '光線', color: '色彩', effects: '效果' },
+  overlayLabel: '遮罩把手：拖曳點調整位置與大小',
+}
+
+export const masks = {
+  'zh-Hant': zh,
+  en: {
+    title: 'Masking',
+    addLinear: 'Add Linear Gradient',
+    addRadial: 'Add Radial Gradient',
+    full: (max: number) => `Up to ${max} masks`,
+    empty: 'Apply adjustments to part of the photo, like darkening the sky or brightening the subject.',
+    list: 'Masks',
+    name: { linear: (n: number) => `Linear ${n}`, radial: (n: number) => `Radial ${n}` },
+    deleteMask: (name: string) => `Delete ${name}`,
+    showOverlay: 'Show overlay',
+    selectHint: 'Select a mask to adjust it.',
+    moveHint: {
+      linear: 'Drag the end points to adjust the gradient.',
+      radial: 'Drag the center to move it; drag the edge points to resize.',
+    },
+    feather: 'Feather',
+    invert: 'Invert',
+    resetAdjust: (name: string) => `Reset ${name} adjustments`,
+    groups: { light: 'Light', color: 'Color', effects: 'Effects' },
+    overlayLabel: 'Mask handles: drag the points to move and resize',
+  } satisfies typeof zh,
+}

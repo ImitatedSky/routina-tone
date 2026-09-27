@@ -133,6 +133,16 @@ uniform float u_gradeBlend;
 uniform vec4 u_vignette;   // 強度 -1..1、中點 0..1、羽化 0..1、圓度 -1..1
 uniform vec3 u_grain;      // 強度 0..1、顆粒大小（原圖像素）、粗糙度 0..1
 
+// 局部遮罩（見 masks.ts），最多 8 個
+uniform vec2 u_sourceSize;     // 原圖像素尺寸，遮罩的距離要在像素上算才不會被長寬比拉扁
+uniform int u_maskCount;
+uniform vec4 u_maskShape[8];   // 線性：起點 xy、終點 zw；放射狀：中心 xy、半徑 zw（原圖 uv）
+uniform vec4 u_maskInfo[8];    // 型別（0 線性、1 放射狀）、羽化 0..1、反轉 0/1
+uniform vec4 u_maskA[8];       // 曝光（EV）、對比、亮部、陰影（-1..1）
+uniform vec4 u_maskB[8];       // 飽和度、清晰度、紋理、去朦朧（-1..1）
+uniform mat3 u_maskWB[8];      // 局部白平衡
+uniform int u_showMask;        // 要塗紅顯示範圍的遮罩，-1 = 不顯示
+
 ${COLOR_FUNCTIONS}
 const float TAU = 6.2831853;
 // log 亮度的下限，避免純黑的 log 爆掉、放大暗部雜訊
@@ -198,6 +208,24 @@ float valueNoise(vec2 x) {
     f.y);
 }
 
+// 線性：起點以前完全套用、終點以後不套用，中間平滑過渡。放射狀：橢圓內套用，羽化決定邊緣多軟
+float maskWeight(int i, vec2 px) {
+  vec4 shape = u_maskShape[i];
+  vec4 info = u_maskInfo[i];
+  float w;
+  if (info.x < 0.5) {
+    vec2 a = shape.xy * u_sourceSize;
+    vec2 d = shape.zw * u_sourceSize - a;
+    float along = dot(px - a, d) / max(dot(d, d), 1e-6);
+    w = 1.0 - smoothstep(0.0, 1.0, along);
+  } else {
+    vec2 r = max(shape.zw * u_sourceSize, vec2(1.0));
+    float e = length((px - shape.xy * u_sourceSize) / r);
+    w = 1.0 - smoothstep(1.0 - info.y, 1.0001, e);
+  }
+  return info.z > 0.5 ? 1.0 - w : w;
+}
+
 void main() {
   vec2 outUv = u_outRegion.xy + v_uv * u_outRegion.zw;
   vec2 imageUv = (u_geometry * vec3(outUv, 1.0)).xy;
@@ -205,6 +233,33 @@ void main() {
   bool outside = any(lessThan(imageUv, vec2(0.0))) || any(greaterThan(imageUv, vec2(1.0)));
   vec2 tileUv = (imageUv - u_region.xy) / u_region.zw;
   vec3 lin = srgbToLinear(texture(u_image, tileUv).rgb);
+
+  // 整體的數值加上各遮罩的局部調整（依遮罩權重）
+  float exposure = u_exposure;
+  float contrast = u_contrast;
+  float highlights = u_highlights;
+  float shadows = u_shadows;
+  float saturation = u_saturation;
+  float clarity = u_clarity;
+  float textureAmount = u_texture;
+  float dehaze = u_dehaze;
+  float maskWeights[8];
+  vec2 px = imageUv * u_sourceSize;
+  for (int i = 0; i < 8; i++) {
+    if (i >= u_maskCount) break;
+    float w = maskWeight(i, px);
+    maskWeights[i] = w;
+    exposure += w * u_maskA[i].x;
+    contrast += w * u_maskA[i].y;
+    highlights += w * u_maskA[i].z;
+    shadows += w * u_maskA[i].w;
+    saturation += w * u_maskB[i].x;
+    clarity += w * u_maskB[i].y;
+    textureAmount += w * u_maskB[i].z;
+    dehaze += w * u_maskB[i].w;
+  }
+  contrast = clamp(contrast, -1.0, 1.0);
+  dehaze = clamp(dehaze, -1.0, 1.0);
 
   // 局部對比用的 log 亮度都取自原圖，和曝光、白平衡無關，所以只要算一次
   float sourceLog = log2(dot(lin, LUMA) + LOG_EPS);
@@ -214,24 +269,28 @@ void main() {
   float clarityLog = log2(baseY + LOG_EPS);
 
   // 去霧：J = (I - A) / t + A，t 是依暗通道估出的透光率。往左是加霧
-  if (u_dehaze > 0.0) {
+  if (dehaze > 0.0) {
     float dark = texture(u_haze, imageUv).r;
-    float t = max(1.0 - u_dehaze * 0.95 * dark, 0.1);
+    float t = max(1.0 - dehaze * 0.95 * dark, 0.1);
     lin = max((lin - u_atmosphere) / t + u_atmosphere, 0.0);
-  } else if (u_dehaze < 0.0) {
-    lin = mix(lin, u_atmosphere, -u_dehaze * 0.5);
+  } else if (dehaze < 0.0) {
+    lin = mix(lin, u_atmosphere, -dehaze * 0.5);
   }
 
   lin = u_whiteBalance * lin;
-  lin *= exp2(u_exposure);
+  for (int i = 0; i < 8; i++) {
+    if (i >= u_maskCount) break;
+    lin = mix(lin, u_maskWB[i] * lin, maskWeights[i]);
+  }
+  lin *= exp2(exposure);
 
   // 紋理 = 細節（原圖 - 小模糊）；清晰度 = 中頻（小模糊 - 大模糊），只作用在中間調；
   // 銳化 = 最細的細節，遮罩越高越只留在明顯的邊緣上
   float py = linearToSrgb1(dot(lin, LUMA));
   float midtones = clamp(4.0 * py * (1.0 - py), 0.0, 1.0);
   float edges = mix(1.0, smoothstep(0.05, 0.35, abs(sourceLog - textureLog)), u_sharpenMasking);
-  float detail = u_texture * 0.7 * (sourceLog - textureLog)
-    + u_clarity * 0.6 * (textureLog - clarityLog) * midtones
+  float detail = textureAmount * 0.7 * (sourceLog - textureLog)
+    + clarity * 0.6 * (textureLog - clarityLog) * midtones
     + u_sharpenAmount * 1.2 * (sourceLog - sharpenLog) * edges;
   lin *= exp2(clamp(detail, -3.0, 3.0));
 
@@ -239,14 +298,14 @@ void main() {
   vec3 p = linearToSrgb(lin);
 
   // 亮部 / 陰影：遮罩一半用像素自己、一半用大範圍的亮度，暗處裡的亮點不會被當成亮部
-  float maskY = mix(dot(p, LUMA), linearToSrgb1(baseY * exp2(u_exposure)), 0.5);
+  float maskY = mix(dot(p, LUMA), linearToSrgb1(baseY * exp2(exposure)), 0.5);
   float shadowMask = 1.0 - smoothstep(0.0, 0.5, maskY);
   float highlightMask = smoothstep(0.5, 1.0, maskY);
-  p *= max(0.0, 1.0 + u_shadows * 0.6 * shadowMask + u_highlights * 0.4 * highlightMask);
+  p *= max(0.0, 1.0 + shadows * 0.6 * shadowMask + highlights * 0.4 * highlightMask);
 
   // 對比：以中間灰為支點的 S 曲線，|c| <= 1 時保證單調
   vec3 pc = clamp(p, 0.0, 1.0);
-  p -= u_contrast * sin(TAU * pc) / TAU;
+  p -= contrast * sin(TAU * pc) / TAU;
 
   // 白色 / 黑色：主要動到兩端
   pc = clamp(p, 0.0, 1.0);
@@ -259,7 +318,7 @@ void main() {
   float maxC = max(p.r, max(p.g, p.b));
   float minC = min(p.r, min(p.g, p.b));
   float sat = maxC > 0.0 ? (maxC - minC) / maxC : 0.0;
-  p = mix(vec3(luma), p, (1.0 + u_saturation) * max(0.0, 1.0 + u_vibrance * (1.0 - sat)));
+  p = mix(vec3(luma), p, max(0.0, 1.0 + saturation) * max(0.0, 1.0 + u_vibrance * (1.0 - sat)));
 
   // 曲線：先主曲線（參數式 + RGB 點曲線，已在 TS 端合成），再各通道
   p = vec3(curve(p.r, 0.0), curve(p.g, 0.0), curve(p.b, 0.0));
@@ -319,6 +378,9 @@ void main() {
     p += (noise - 0.5) * u_grain.x * 0.28 * (0.35 + 2.6 * y * (1.0 - y));
   }
 
+  if (u_showMask >= 0 && u_showMask < u_maskCount) {
+    p = mix(p, vec3(1.0, 0.15, 0.15), maskWeights[u_showMask] * 0.55);
+  }
   if (outside) p = vec3(0.1);
   outColor = vec4(clamp(p, 0.0, 1.0), 1.0);
 }
