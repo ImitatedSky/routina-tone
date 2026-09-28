@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { EditPanel } from '@/components/editor/EditPanel'
 import { EmptyState } from '@/components/editor/EmptyState'
+import { PanelToggle } from '@/components/editor/PanelToggle'
 import { PhotoCanvas } from '@/components/editor/PhotoCanvas'
 import { Toolbar } from '@/components/editor/Toolbar'
 import { useEditor } from '@/editor/editorStore'
@@ -37,6 +38,7 @@ export function App() {
       {hasPhoto ? (
         <main className="flex min-h-0 flex-1 flex-col md:flex-row">
           <PhotoCanvas />
+          <PanelToggle />
           <EditPanel />
         </main>
       ) : (

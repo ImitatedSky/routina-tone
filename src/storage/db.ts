@@ -4,6 +4,8 @@ import { normalizeAdjustments, diffFromDefaults, type Adjustments, type Adjustme
 export interface Preset {
   id: string
   name: string
+  // '' 表示沒有分組
+  group: string
   adjustments: Adjustments
   createdAt: number
 }
@@ -16,9 +18,11 @@ export interface Session {
 }
 
 // 參數一律存成「和預設值的差異」，讀出來再補預設值，之後新增參數時舊資料照樣能用
+// group 是後來加的欄位，舊資料沒有，讀出來當成 ''
 interface StoredPreset {
   id: string
   name: string
+  group?: string
   adjustments: AdjustmentsPatch
   createdAt: number
 }
@@ -49,12 +53,16 @@ function db() {
 export async function listPresets(): Promise<Preset[]> {
   const rows = await (await db()).getAll('presets')
   return rows
-    .map((row) => ({ ...row, adjustments: normalizeAdjustments(row.adjustments) }))
+    .map((row) => ({
+      ...row,
+      group: typeof row.group === 'string' ? row.group : '',
+      adjustments: normalizeAdjustments(row.adjustments),
+    }))
     .sort((a, b) => b.createdAt - a.createdAt)
 }
 
-export async function addPreset(name: string, adjustments: Adjustments): Promise<Preset> {
-  const preset: Preset = { id: crypto.randomUUID(), name, adjustments, createdAt: Date.now() }
+export async function addPreset(name: string, adjustments: Adjustments, group = ''): Promise<Preset> {
+  const preset: Preset = { id: crypto.randomUUID(), name, group, adjustments, createdAt: Date.now() }
   await putPreset(preset)
   return preset
 }
@@ -62,6 +70,13 @@ export async function addPreset(name: string, adjustments: Adjustments): Promise
 // 也用來復原剛刪掉的預設集（保留原本的 id 與建立時間）
 export async function putPreset(preset: Preset): Promise<void> {
   await (await db()).put('presets', { ...preset, adjustments: diffFromDefaults(preset.adjustments) })
+}
+
+export async function updatePreset(id: string, changes: { name?: string; group?: string }): Promise<void> {
+  const tx = (await db()).transaction('presets', 'readwrite')
+  const row = await tx.store.get(id)
+  if (row) await tx.store.put({ ...row, ...changes })
+  await tx.done
 }
 
 export async function deletePreset(id: string): Promise<void> {

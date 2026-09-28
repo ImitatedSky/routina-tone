@@ -121,6 +121,8 @@ uniform float u_vibrance;
 uniform float u_saturation;
 uniform float u_sharpenAmount;
 uniform float u_sharpenMasking;
+uniform float u_sharpenDetail;    // 0..1
+uniform float u_vignetteHighlights; // 0..1
 uniform float u_hue[8];
 uniform float u_sat[8];
 uniform float u_lum[8];
@@ -293,9 +295,13 @@ void main() {
   float py = linearToSrgb1(dot(lin, LUMA));
   float midtones = clamp(4.0 * py * (1.0 - py), 0.0, 1.0);
   float edges = mix(1.0, smoothstep(0.05, 0.35, abs(sourceLog - textureLog)), u_sharpenMasking);
+  // 銳化的「細節」：細紋理照常加，大邊緣的差值用 tanh 壓住，越低光暈越少（Lightroom 的 Detail）
+  float fine = sourceLog - sharpenLog;
+  float fineLimit = mix(0.04, 1.0, u_sharpenDetail);
+  fine = fineLimit * tanh(fine / fineLimit);
   float detail = textureAmount * 0.7 * (sourceLog - textureLog)
     + clarity * 0.6 * (textureLog - clarityLog) * midtones
-    + u_sharpenAmount * 1.2 * (sourceLog - sharpenLog) * edges;
+    + u_sharpenAmount * 1.2 * fine * edges;
   lin *= exp2(clamp(detail, -3.0, 3.0));
 
   // 曝光之後可能超過 1，先留著，亮部滑桿還能把它拉回來
@@ -371,7 +377,9 @@ void main() {
     float start = mix(0.25, 1.35, u_vignette.y);
     float width = mix(0.05, 1.2, u_vignette.z);
     float v = smoothstep(start - width * 0.5, start + width * 0.5, d);
-    p = u_vignette.x < 0.0 ? p * (1.0 + u_vignette.x * v) : mix(p, vec3(1.0), u_vignette.x * v);
+    // 「亮部」：壓暗時保留亮的地方（例如路燈、天空的亮處），只有負的總量才有作用
+    float protect = u_vignetteHighlights * smoothstep(0.5, 1.0, dot(p, LUMA));
+    p = u_vignette.x < 0.0 ? p * (1.0 + u_vignette.x * v * (1.0 - protect)) : mix(p, vec3(1.0), u_vignette.x * v);
   }
 
   // 顆粒：以輸出的原圖像素為單位的雜訊，預覽與匯出一致；中間調最明顯

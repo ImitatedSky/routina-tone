@@ -68,11 +68,13 @@ const ATTRIBUTE_PRESET = wrap(`<rdf:Description rdf:about=""
    crs:SplitToningBalance="-10"
    crs:Sharpness="40"
    crs:SharpenRadius="+1.0"
+   crs:SharpenDetail="40"
    crs:SharpenEdgeMasking="20"
    crs:PostCropVignetteAmount="-18"
    crs:PostCropVignetteMidpoint="40"
    crs:PostCropVignetteFeather="70"
    crs:PostCropVignetteRoundness="0"
+   crs:PostCropVignetteHighlightContrast="30"
    crs:GrainAmount="22"
    crs:GrainSize="30"
    crs:GrainFrequency="60"
@@ -121,6 +123,7 @@ describe('parseXmpPreset', () => {
   it('reads an attribute-style Lightroom Classic preset', () => {
     const result = parseXmpPreset(ATTRIBUTE_PRESET, 'Warm Film.xmp')
     expect(result.name).toBe('Warm Film')
+    expect(result.group).toBe('Film')
     expect(result.warnings).toEqual([])
     const adj = result.adjustments
     expect(adj).toMatchObject({
@@ -154,10 +157,12 @@ describe('parseXmpPreset', () => {
       gradeBalance: -10,
       sharpenAmount: 40,
       sharpenRadius: 1,
+      sharpenDetail: 40,
       sharpenMasking: 20,
       vignetteAmount: -18,
       vignetteMidpoint: 40,
       vignetteFeather: 70,
+      vignetteHighlights: 30,
       grainAmount: 22,
       grainSize: 30,
       grainRoughness: 60,
@@ -200,6 +205,7 @@ describe('parseXmpPreset', () => {
     </rdf:Description>`)
     const result = parseXmpPreset(text, 'Moody Blue.xmp')
     expect(result.name).toBe('Moody Blue')
+    expect(result.group).toBe('')
     expect(result.adjustments).toEqual({
       ...DEFAULT_ADJUSTMENTS,
       exposure: 0.5,
@@ -214,6 +220,18 @@ describe('parseXmpPreset', () => {
         ],
       },
     })
+  })
+
+  it('reads the group from an attribute', () => {
+    const text = wrap(`<rdf:Description rdf:about="" xmlns:crs="${CRS}"
+      crs:Name="Soft" crs:Group="  My Looks  " crs:Contrast2012="+10"/>`)
+    expect(parseXmpPreset(text, 'x.xmp')).toMatchObject({ name: 'Soft', group: 'My Looks' })
+  })
+
+  it('keeps the Lightroom default of 25 for sharpening detail and clamps the vignette highlights', () => {
+    const text = wrap(`<rdf:Description rdf:about="" xmlns:crs="${CRS}"
+      crs:SharpenDetail="25" crs:PostCropVignetteHighlightContrast="150"/>`)
+    expect(parseXmpPreset(text, 'x.xmp').adjustments).toEqual({ ...DEFAULT_ADJUSTMENTS, vignetteHighlights: 100 })
   })
 
   it('uses legacy split toning when there is no color grading', () => {
@@ -294,6 +312,7 @@ describe('parseXmpPreset', () => {
 
     // Look 與遮罩裡的數值不能蓋掉整張照片的設定
     expect(result.adjustments).toEqual({ ...DEFAULT_ADJUSTMENTS, exposure: 0.2, saturation: -100 })
+    expect(result.group).toBe('')
   })
 
   it('does not warn about empty masks or As Shot white balance', () => {

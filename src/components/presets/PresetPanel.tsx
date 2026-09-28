@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ClipboardPaste, Copy, Download, FileUp, Plus, Trash2 } from 'lucide-react'
+import { ClipboardPaste, FileUp, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,19 +9,30 @@ import { t, useT } from '@/i18n/i18n'
 import { copyText } from '@/lib/clipboard'
 import { safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
-import { PRESET_EXTENSION, parsePresetFile, serializePreset } from '@/presets/presetFile'
+import { PRESET_EXTENSION, normalizeGroup, parsePresetFile, serializePreset } from '@/presets/presetFile'
 import { parseXmpPreset } from '@/presets/xmp'
-import { addPreset, deletePreset, listPresets, putPreset, type Preset } from '@/storage/db'
+import { addPreset, deletePreset, listPresets, putPreset, updatePreset, type Preset } from '@/storage/db'
+import { EditPresetDialog } from './EditPresetDialog'
+import { GroupInput } from './GroupInput'
 import { PasteImportDialog } from './PasteImportDialog'
+import { PresetList } from './PresetList'
+
+function groupNames(presets: Preset[]): string[] {
+  return [...new Set(presets.map((p) => p.group).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+}
 
 export function PresetPanel() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [name, setName] = useState('')
+  const [group, setGroup] = useState('')
+  const [editing, setEditing] = useState<Preset | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   const current = useEditor((s) => s.adjustments)
   const apply = useEditor((s) => s.apply)
   const m = useT()
+  const groups = groupNames(presets)
 
   async function refresh() {
     setPresets(await listPresets())
@@ -35,7 +46,7 @@ export function PresetPanel() {
     const trimmed = name.trim()
     if (!trimmed) return
     // 裁切、拉直屬於這張照片，不存進預設集
-    await addPreset(trimmed, withoutGeometry(current))
+    await addPreset(trimmed, withoutGeometry(current), normalizeGroup(group))
     setName('')
     await refresh()
     toast.success(m.presets.saved(trimmed))
@@ -52,8 +63,13 @@ export function PresetPanel() {
     })
   }
 
+  async function saveEdit(preset: Preset, newName: string, newGroup: string) {
+    await updatePreset(preset.id, { name: newName, group: newGroup })
+    await refresh()
+  }
+
   async function exportOne(preset: Preset) {
-    const blob = new Blob([serializePreset(preset.name, preset.adjustments)], { type: 'application/json' })
+    const blob = new Blob([serializePreset(preset.name, preset.adjustments, preset.group)], { type: 'application/json' })
     try {
       const saved = await saveFile(blob, safeFilename(preset.name) + PRESET_EXTENSION, 'document')
       if (saved.status === 'saved' && saved.message) toast.success(saved.message)
@@ -63,7 +79,7 @@ export function PresetPanel() {
   }
 
   async function copyOne(preset: Preset) {
-    const ok = await copyText(serializePreset(preset.name, preset.adjustments))
+    const ok = await copyText(serializePreset(preset.name, preset.adjustments, preset.group))
     if (ok) toast.success(m.presets.copied)
     else toast.error(m.presets.copyFailed)
   }
@@ -71,16 +87,16 @@ export function PresetPanel() {
   // 一份預設集的文字：.xmp 是 XML（以 < 開頭），其他當成我們的 JSON。失敗時丟出錯誤
   async function importText(text: string, fileName: string) {
     if (/\.xmp$/i.test(fileName) || text.trimStart().startsWith('<')) {
-      const { name: presetName, adjustments, warnings } = parseXmpPreset(text, fileName)
-      await addPreset(presetName, adjustments)
+      const { name: presetName, group: presetGroup, adjustments, warnings } = parseXmpPreset(text, fileName)
+      await addPreset(presetName, adjustments, presetGroup)
       if (warnings.length > 0) {
         toast.warning(m.presets.partiallyApplied(presetName), {
           description: warnings.join(m.presets.listSeparator),
         })
       }
     } else {
-      const { name: presetName, adjustments } = parsePresetFile(text)
-      await addPreset(presetName, adjustments)
+      const { name: presetName, group: presetGroup, adjustments } = parsePresetFile(text)
+      await addPreset(presetName, adjustments, presetGroup)
     }
   }
 
@@ -115,17 +131,31 @@ export function PresetPanel() {
   return (
     <div className="space-y-4 px-4 py-3">
       <form
-        className="flex gap-2"
+        className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault()
           void save()
         }}
       >
-        <Input placeholder={m.presets.namePlaceholder} value={name} onChange={(e) => setName(e.target.value)} />
-        <Button type="submit" size="default" disabled={!name.trim() || isDefault(withoutGeometry(current))}>
-          <Plus />
-          {m.common.save}
-        </Button>
+        <Input
+          aria-label={m.presets.nameLabel}
+          placeholder={m.presets.namePlaceholder}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <GroupInput
+            aria-label={m.presets.groupLabel}
+            placeholder={m.presets.groupPlaceholder}
+            value={group}
+            onChange={setGroup}
+            groups={groups}
+          />
+          <Button type="submit" size="default" disabled={!name.trim() || isDefault(withoutGeometry(current))}>
+            <Plus />
+            {m.common.save}
+          </Button>
+        </div>
       </form>
 
       <div>
@@ -142,6 +172,7 @@ export function PresetPanel() {
         <p className="mt-1.5 text-center text-xs text-muted-foreground">{m.presets.importHint}</p>
       </div>
       <PasteImportDialog open={pasteOpen} onOpenChange={setPasteOpen} onImport={importPasted} />
+      <EditPresetDialog preset={editing} open={editOpen} onOpenChange={setEditOpen} groups={groups} onSave={saveEdit} />
       <input
         ref={importRef}
         type="file"
@@ -157,28 +188,18 @@ export function PresetPanel() {
       {presets.length === 0 ? (
         <p className="py-4 text-center text-xs text-muted-foreground">{m.presets.empty}</p>
       ) : (
-        <ul className="divide-y rounded-lg border">
-          {presets.map((preset) => (
-            <li key={preset.id} className="flex items-center gap-1 pr-1">
-              <button
-                type="button"
-                className="min-w-0 flex-1 truncate px-3 py-2.5 text-left text-sm hover:text-primary"
-                onClick={() => apply(applyStyle(useEditor.getState().adjustments, preset.adjustments))}
-              >
-                {preset.name}
-              </button>
-              <Button variant="ghost" size="icon-sm" aria-label={m.presets.copyPreset(preset.name)} onClick={() => void copyOne(preset)}>
-                <Copy />
-              </Button>
-              <Button variant="ghost" size="icon-sm" aria-label={m.presets.exportPreset(preset.name)} onClick={() => void exportOne(preset)}>
-                <Download />
-              </Button>
-              <Button variant="ghost" size="icon-sm" aria-label={m.presets.deletePreset(preset.name)} onClick={() => void remove(preset)}>
-                <Trash2 />
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <PresetList
+          presets={presets}
+          groups={groups}
+          onApply={(preset) => apply(applyStyle(useEditor.getState().adjustments, preset.adjustments))}
+          onEdit={(preset) => {
+            setEditing(preset)
+            setEditOpen(true)
+          }}
+          onCopy={(preset) => void copyOne(preset)}
+          onExport={(preset) => void exportOne(preset)}
+          onDelete={(preset) => void remove(preset)}
+        />
       )}
     </div>
   )

@@ -9,6 +9,7 @@ import {
   type ScalarKey,
 } from '@/engine/adjustments'
 import { t } from '@/i18n/i18n'
+import { normalizeGroup } from './presetFile'
 
 // 匯入 Lightroom / Camera Raw 的 .xmp 預設集
 
@@ -17,6 +18,7 @@ const RDF_NS = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
 
 export interface XmpImport {
   name: string
+  group: string
   adjustments: Adjustments
   warnings: string[]
 }
@@ -56,12 +58,14 @@ const DIRECT_KEYS: Record<string, ScalarKey> = {
 
   Sharpness: 'sharpenAmount',
   SharpenRadius: 'sharpenRadius',
+  SharpenDetail: 'sharpenDetail',
   SharpenEdgeMasking: 'sharpenMasking',
 
   PostCropVignetteAmount: 'vignetteAmount',
   PostCropVignetteMidpoint: 'vignetteMidpoint',
   PostCropVignetteFeather: 'vignetteFeather',
   PostCropVignetteRoundness: 'vignetteRoundness',
+  PostCropVignetteHighlightContrast: 'vignetteHighlights',
 
   GrainAmount: 'grainAmount',
   GrainSize: 'grainSize',
@@ -140,15 +144,16 @@ function listItems(el: Element): Element[] {
   return Array.from(el.getElementsByTagNameNS(RDF_NS, 'li'))
 }
 
-function readName(settings: CrsSettings): string {
-  const alt = settings.complex.get('Name')
+// 名稱、群組：可能是多語系的 rdf:Alt，也可能是屬性
+function readText(settings: CrsSettings, key: string): string {
+  const alt = settings.complex.get(key)
   if (alt) {
     const items = listItems(alt)
     const preferred = items.find((li) => li.getAttribute('xml:lang') === 'x-default') ?? items[0]
     const text = preferred?.textContent?.trim()
     if (text) return text
   }
-  return settings.values.get('Name') ?? ''
+  return settings.values.get(key) ?? ''
 }
 
 // "x, y" 一行一點
@@ -236,6 +241,7 @@ export function parseXmpPreset(text: string, fileName: string): XmpImport {
   if (values.get('HasCrop')?.toLowerCase() === 'true') warnings.add(t().presets.xmpCrop)
   if (values.get('LensProfileEnable') === '1') warnings.add(t().presets.xmpLensProfile)
 
-  const name = readName(settings) || fileBaseName(fileName) || t().presets.untitled
-  return { name, adjustments: normalizeAdjustments(raw), warnings: [...warnings] }
+  const name = readText(settings, 'Name') || fileBaseName(fileName) || t().presets.untitled
+  const group = normalizeGroup(readText(settings, 'Group'))
+  return { name, group, adjustments: normalizeAdjustments(raw), warnings: [...warnings] }
 }

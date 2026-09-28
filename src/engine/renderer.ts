@@ -271,6 +271,8 @@ export class Renderer {
       u_saturation: adj.saturation / 100,
       u_sharpenAmount: adj.sharpenAmount / 100,
       u_sharpenMasking: adj.sharpenMasking / 100,
+      u_sharpenDetail: adj.sharpenDetail / 100,
+      u_vignetteHighlights: adj.vignetteHighlights / 100,
       u_hue: mixer.hue,
       u_sat: mixer.sat,
       u_lum: mixer.lum,

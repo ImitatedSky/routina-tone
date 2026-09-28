@@ -45,12 +45,14 @@ export type ScalarKey =
   // 細節
   | 'sharpenAmount'
   | 'sharpenRadius'
+  | 'sharpenDetail'
   | 'sharpenMasking'
   // 效果
   | 'vignetteAmount'
   | 'vignetteMidpoint'
   | 'vignetteFeather'
   | 'vignetteRoundness'
+  | 'vignetteHighlights'
   | 'grainAmount'
   | 'grainSize'
   | 'grainRoughness'
@@ -136,12 +138,16 @@ const SPECS = {
 
   sharpenAmount: { min: 0, max: 150, step: 1, default: 0 },
   sharpenRadius: { min: 0.5, max: 3, step: 0.1, default: 1 },
+  // Lightroom 的「細節」：越低越壓抑大邊緣的光暈，越高越強調細紋理
+  sharpenDetail: { ...POSITIVE, default: 25 },
   sharpenMasking: POSITIVE,
 
   vignetteAmount: PERCENT,
   vignetteMidpoint: { ...POSITIVE, default: 50 },
   vignetteFeather: { ...POSITIVE, default: 50 },
   vignetteRoundness: PERCENT,
+  // Lightroom 裁切後暗角的「亮部」：暗角壓暗時保留亮的地方
+  vignetteHighlights: POSITIVE,
   grainAmount: POSITIVE,
   grainSize: { ...POSITIVE, default: 25 },
   grainRoughness: { ...POSITIVE, default: 50 },

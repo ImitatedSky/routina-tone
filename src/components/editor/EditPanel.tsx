@@ -7,6 +7,7 @@ import { MixerPanel } from '@/components/panels/MixerPanel'
 import { PresetPanel } from '@/components/presets/PresetPanel'
 import { useView } from '@/editor/editorStore'
 import { useT } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
 import { SliderSection } from './SliderSection'
 import {
   GRAIN_SLIDERS,
@@ -28,9 +29,11 @@ export function EditPanel() {
   const { sections } = t.editor
   const setCropMode = useView((s) => s.setCropMode)
   const setMaskMode = useView((s) => s.setMaskMode)
+  // 收起時只隱藏、不卸載，分頁與捲動位置才會留著
+  const collapsed = useView((s) => s.panelCollapsed)
 
   return (
-    <aside className="flex h-[54%] shrink-0 flex-col border-t md:h-auto md:w-80 md:border-t-0 md:border-l">
+    <aside className={cn('flex h-[54%] shrink-0 flex-col md:h-auto md:w-80', collapsed && 'hidden')}>
       <Tabs
         defaultValue="light"
         className="min-h-0 flex-1 gap-0"

@@ -10,6 +10,25 @@ describe('preset file', () => {
     expect(parsed.adjustments).toEqual(adj)
   })
 
+  it('round-trips the group and leaves it out when there is none', () => {
+    const text = serializePreset('暖色', DEFAULT_ADJUSTMENTS, 'Film')
+    expect(JSON.parse(text)).toMatchObject({ version: 1, group: 'Film' })
+    expect(parsePresetFile(text).group).toBe('Film')
+
+    const plain = serializePreset('暖色', DEFAULT_ADJUSTMENTS)
+    expect(JSON.parse(plain)).not.toHaveProperty('group')
+    expect(parsePresetFile(plain).group).toBe('')
+  })
+
+  it('trims the group, caps its length and ignores invalid values', () => {
+    const file = (group: unknown) =>
+      JSON.stringify({ format: 'routina-tone-preset', version: 1, name: 'x', group, adjustments: {} })
+    expect(parsePresetFile(file('  Film  ')).group).toBe('Film')
+    expect(parsePresetFile(file('a'.repeat(100))).group).toBe('a'.repeat(60))
+    expect(parsePresetFile(file(42)).group).toBe('')
+    expect(parsePresetFile(file('   ')).group).toBe('')
+  })
+
   it('stores only values that differ from the defaults', () => {
     const adj = { ...DEFAULT_ADJUSTMENTS, contrast: 30 }
     expect(JSON.parse(serializePreset('x', adj)).adjustments).toEqual({ contrast: 30 })

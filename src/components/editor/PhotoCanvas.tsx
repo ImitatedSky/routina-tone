@@ -8,6 +8,7 @@ import { Renderer, supportsWebGL2 } from '@/engine/renderer'
 import { useEditor, useView } from '@/editor/editorStore'
 import { useT } from '@/i18n/i18n'
 import { Histogram } from './Histogram'
+import { useZoomGestures } from './useZoomGestures'
 
 // 直方圖不必每一格拖曳都更新，太頻繁反而拖慢手機
 const HISTOGRAM_INTERVAL = 120
@@ -45,6 +46,8 @@ export function PhotoCanvas() {
   const t = useT()
   const outerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  // 畫布放在這一層，縮放平移時只變換這一層；手勢由外面的 containerRef 接
+  const zoomRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<Renderer | null>(null)
   const lastHistogramRef = useRef(0)
   const histogramTimerRef = useRef<number | undefined>(undefined)
@@ -66,7 +69,7 @@ export function PhotoCanvas() {
     if (!supported) return
     const canvas = document.createElement('canvas')
     canvas.className = 'absolute inset-0 m-auto max-h-full max-w-full'
-    containerRef.current!.appendChild(canvas)
+    zoomRef.current!.appendChild(canvas)
     rendererRef.current = new Renderer(canvas)
 
     // 畫布大小會隨裁切改變，外框也會隨視窗改變；兩者都要重新對齊裁切框
@@ -129,26 +132,29 @@ export function PhotoCanvas() {
     }
   }, [photo, adjustments, showOriginal, showHistogram, cropMode, maskMode, showMask, selectedMask])
 
-  const hideOriginal = () => setShowOriginal(false)
-  // 裁切、調遮罩時手指是在拖把手，不是在比較原圖
-  const compareHandlers = cropMode || maskMode
-    ? {}
-    : {
-        onPointerDown: () => setShowOriginal(true),
-        onPointerUp: hideOriginal,
-        onPointerLeave: hideOriginal,
-        onPointerCancel: hideOriginal,
-      }
+  // 裁切、調遮罩時手指是在拖把手，不縮放也不比較原圖；換照片或換模式時回到原大小
+  const { zoom, handlers } = useZoomGestures(containerRef, {
+    enabled: !cropMode && !maskMode,
+    resetKey: `${photo?.name ?? ''}|${photo?.width ?? 0}|${cropMode}|${maskMode}`,
+    onPressStart: () => setShowOriginal(true),
+    onPressEnd: () => setShowOriginal(false),
+  })
 
   return (
-    <div ref={outerRef} className="relative min-h-0 flex-1 bg-canvas">
+    <div ref={outerRef} className="relative min-h-0 flex-1 overflow-hidden bg-canvas">
       <div
         ref={containerRef}
         className="absolute inset-3 select-none"
         style={{ touchAction: 'none' }}
-        {...compareHandlers}
+        {...handlers}
         onContextMenu={(e) => e.preventDefault()}
-      />
+      >
+        <div
+          ref={zoomRef}
+          className="absolute inset-0"
+          style={{ transform: `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`, transformOrigin: '0 0' }}
+        />
+      </div>
       {cropMode && photo && box && <CropOverlay box={box} />}
       {maskMode && photo && box && <MaskOverlay box={box} />}
       {showHistogram && !cropMode && <Histogram className="pointer-events-none absolute top-3 right-3" />}

@@ -34,14 +34,16 @@ export const PRESENCE_EFFECT_SLIDERS: SliderSpec[] = [{ key: 'texture' }, { key:
 export const SHARPEN_SLIDERS: SliderSpec[] = [
   { key: 'sharpenAmount' },
   { key: 'sharpenRadius' },
+  { key: 'sharpenDetail' },
   { key: 'sharpenMasking' },
 ]
 
 export const VIGNETTE_SLIDERS: SliderSpec[] = [
   { key: 'vignetteAmount', track: 'linear-gradient(to right, #111, #777, #eee)' },
   { key: 'vignetteMidpoint' },
-  { key: 'vignetteFeather' },
   { key: 'vignetteRoundness' },
+  { key: 'vignetteFeather' },
+  { key: 'vignetteHighlights' },
 ]
 
 export const GRAIN_SLIDERS: SliderSpec[] = [{ key: 'grainAmount' }, { key: 'grainSize' }, { key: 'grainRoughness' }]

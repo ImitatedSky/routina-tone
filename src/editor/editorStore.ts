@@ -147,6 +147,9 @@ interface ViewState {
   brushSize: number
   brushFeather: number
   brushErase: boolean
+  // 收起下方（桌機是右側）的操作面板，讓照片佔滿畫面
+  panelCollapsed: boolean
+  setPanelCollapsed: (value: boolean) => void
   setShowOriginal: (value: boolean) => void
   setBrush: (patch: Partial<{ brushSize: number; brushFeather: number; brushErase: boolean }>) => void
   setMaskMode: (value: boolean) => void
@@ -170,6 +173,8 @@ export const useView = create<ViewState>((set) => ({
   brushSize: 0.08,
   brushFeather: 50,
   brushErase: false,
+  panelCollapsed: false,
+  setPanelCollapsed: (panelCollapsed) => set({ panelCollapsed }),
   setShowOriginal: (showOriginal) => set({ showOriginal }),
   setBrush: (patch) => set(patch),
   setMaskMode: (maskMode) => set({ maskMode }),
