@@ -135,7 +135,8 @@ export function PhotoCanvas() {
   // 裁切、調遮罩時手指是在拖把手，不縮放也不比較原圖；換照片或換模式時回到原大小
   const { zoom, handlers } = useZoomGestures(containerRef, {
     enabled: !cropMode && !maskMode,
-    resetKey: `${photo?.name ?? ''}|${photo?.width ?? 0}|${cropMode}|${maskMode}`,
+    // 畫面大小一變，原本的平移量就對不上了，乾脆回到原大小
+    resetKey: `${photo?.name ?? ''}|${photo?.width ?? 0}|${cropMode}|${maskMode}|${Math.round(box?.width ?? 0)}x${Math.round(box?.height ?? 0)}`,
     onPressStart: () => setShowOriginal(true),
     onPressEnd: () => setShowOriginal(false),
   })

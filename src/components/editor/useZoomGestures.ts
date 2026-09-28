@@ -15,7 +15,8 @@ const MOVE_THRESHOLD = 8
 interface Options {
   // 裁切、遮罩模式時畫布上有把手，不縮放、也不按住看原圖
   enabled: boolean
-  // 換照片、換模式時回到原大小。用 key 而不是 effect 重設，才不會在 effect 裡 setState
+  // 換照片、換模式、畫面大小改變（收起面板、旋轉手機）時回到原大小。
+  // 用 key 而不是 effect 重設，才不會在 effect 裡 setState
   resetKey: string
   // 按住看原圖（只在原大小時；縮放後單指是平移）
   onPressStart: () => void
