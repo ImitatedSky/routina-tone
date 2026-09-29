@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ClipboardPaste, FileUp, Plus } from 'lucide-react'
+import { ArrowUpDown, ClipboardPaste, FileUp, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,18 +11,28 @@ import { safeFilename } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
 import { PRESET_EXTENSION, normalizeGroup, parsePresetFile, serializePreset } from '@/presets/presetFile'
 import { parseXmpPreset } from '@/presets/xmp'
-import { addPreset, deletePreset, listPresets, putPreset, updatePreset, type Preset } from '@/storage/db'
+import { moveGroup, movePreset, orderedGroups, presetSections } from '@/presets/ordering'
+import {
+  addPreset,
+  deletePreset,
+  listPresets,
+  loadGroupOrder,
+  putPreset,
+  saveGroupOrder,
+  setPresetOrders,
+  updatePreset,
+  type Preset,
+} from '@/storage/db'
 import { EditPresetDialog } from './EditPresetDialog'
 import { GroupInput } from './GroupInput'
 import { PasteImportDialog } from './PasteImportDialog'
 import { PresetList } from './PresetList'
 
-function groupNames(presets: Preset[]): string[] {
-  return [...new Set(presets.map((p) => p.group).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-}
 
 export function PresetPanel() {
   const [presets, setPresets] = useState<Preset[]>([])
+  const [groupOrder, setGroupOrder] = useState<string[]>([])
+  const [reordering, setReordering] = useState(false)
   const [name, setName] = useState('')
   const [group, setGroup] = useState('')
   const [editing, setEditing] = useState<Preset | null>(null)
@@ -32,14 +42,30 @@ export function PresetPanel() {
   const current = useEditor((s) => s.adjustments)
   const apply = useEditor((s) => s.apply)
   const m = useT()
-  const groups = groupNames(presets)
+  const groups = orderedGroups(presets, groupOrder)
+  const sections = presetSections(presets, groupOrder)
 
   async function refresh() {
     setPresets(await listPresets())
   }
 
+  async function reorderPreset(section: Preset[], preset: Preset, direction: -1 | 1) {
+    const changes = movePreset(section, preset.id, direction)
+    if (changes.length === 0) return
+    await setPresetOrders(changes)
+    await refresh()
+  }
+
+  async function reorderGroup(group: string, direction: -1 | 1) {
+    // 以畫面上目前的順序為準（包含還沒排過的新群組），存成完整的清單
+    const next = moveGroup(groups, group, direction)
+    setGroupOrder(next)
+    await saveGroupOrder(next)
+  }
+
   useEffect(() => {
     listPresets().then(setPresets, () => toast.error(t().presets.loadFailed))
+    loadGroupOrder().then(setGroupOrder, () => {})
   }, [])
 
   async function save() {
@@ -188,18 +214,34 @@ export function PresetPanel() {
       {presets.length === 0 ? (
         <p className="py-4 text-center text-xs text-muted-foreground">{m.presets.empty}</p>
       ) : (
-        <PresetList
-          presets={presets}
-          groups={groups}
-          onApply={(preset) => apply(applyStyle(useEditor.getState().adjustments, preset.adjustments))}
-          onEdit={(preset) => {
-            setEditing(preset)
-            setEditOpen(true)
-          }}
-          onCopy={(preset) => void copyOne(preset)}
-          onExport={(preset) => void exportOne(preset)}
-          onDelete={(preset) => void remove(preset)}
-        />
+        <>
+          <div className="flex justify-end">
+            <Button
+              variant={reordering ? 'secondary' : 'ghost'}
+              size="sm"
+              aria-pressed={reordering}
+              onClick={() => setReordering(!reordering)}
+            >
+              <ArrowUpDown />
+              {reordering ? m.presets.reorderDone : m.presets.reorder}
+            </Button>
+          </div>
+          <PresetList
+            sections={sections}
+            reordering={reordering}
+            onMovePreset={(section, preset, direction) => void reorderPreset(section, preset, direction)}
+            onMoveGroup={(group, direction) => void reorderGroup(group, direction)}
+            onToggleFavorite={(preset) => void updatePreset(preset.id, { favorite: !preset.favorite }).then(refresh)}
+            onApply={(preset) => apply(applyStyle(useEditor.getState().adjustments, preset.adjustments))}
+            onEdit={(preset) => {
+              setEditing(preset)
+              setEditOpen(true)
+            }}
+            onCopy={(preset) => void copyOne(preset)}
+            onExport={(preset) => void exportOne(preset)}
+            onDelete={(preset) => void remove(preset)}
+          />
+        </>
       )}
     </div>
   )
