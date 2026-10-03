@@ -215,11 +215,12 @@ function ValueInput({
   const stop = { onPointerDown: (e: PointerEvent) => e.stopPropagation(), onDoubleClick: (e: { stopPropagation: () => void }) => e.stopPropagation() }
 
   if (draft === null) {
+    // 「0」只有一個字寬，給最小寬度手指才點得到
     return (
       <button
         type="button"
         aria-label={t.common.typeValue(name)}
-        className="-mr-1 rounded px-1 tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:py-1"
+        className="-mr-1 min-w-10 rounded px-1 text-right tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:min-w-14 pointer-coarse:py-1.5"
         {...stop}
         onClick={() => setDraft(value.toFixed(decimals(step)))}
       >
