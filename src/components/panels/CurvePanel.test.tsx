@@ -58,7 +58,7 @@ describe('CurvePanel', () => {
       [255, 255],
     ])
     expect(past).toHaveLength(1)
-    expect(screen.getByText('170')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '輸出' })).toHaveValue('170')
   })
 
   it('removes a middle point dragged out of the box', () => {
@@ -84,5 +84,25 @@ describe('CurvePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '重設' }))
     expect(useEditor.getState().adjustments.curve.rgb).toEqual(DEFAULT_ADJUSTMENTS.curve.rgb)
+  })
+
+  it('edits the selected point by typing, keeping x between its neighbours', () => {
+    render(<CurvePanel />)
+    const svg = layoutEditor()
+    pointer('pointerDown', svg, 128, 128)
+    pointer('pointerUp', svg, 128, 128)
+
+    const output = screen.getByRole('textbox', { name: '輸出' })
+    fireEvent.change(output, { target: { value: '200' } })
+    fireEvent.blur(output)
+    const input = screen.getByRole('textbox', { name: '輸入' })
+    fireEvent.change(input, { target: { value: '300' } })
+    fireEvent.blur(input)
+
+    expect(useEditor.getState().adjustments.curve.rgb).toEqual([
+      [0, 0],
+      [254, 200],
+      [255, 255],
+    ])
   })
 })

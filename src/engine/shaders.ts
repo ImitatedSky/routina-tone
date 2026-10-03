@@ -37,13 +37,14 @@ out vec4 outColor;
 uniform sampler2D u_src;
 uniform vec2 u_srcSize;
 uniform int u_factor;
+uniform int u_keepColor;  // 1：輸出 RGB（給彩色雜訊用）；0：只輸出亮度
 ${COLOR_FUNCTIONS}
 void main() {
   vec2 center = v_uv * u_srcSize;
-  float sum = 0.0;
+  vec3 sum = vec3(0.0);
   float count = 0.0;
   if (u_factor == 1) {
-    sum = dot(srgbToLinear(texture(u_src, v_uv).rgb), LUMA);
+    sum = srgbToLinear(texture(u_src, v_uv).rgb);
     count = 1.0;
   } else {
     int taps = u_factor / 2;
@@ -52,12 +53,13 @@ void main() {
       for (int i = 0; i < 8; i++) {
         if (i >= taps) break;
         vec2 pos = center - float(u_factor) * 0.5 + 1.0 + 2.0 * vec2(float(i), float(j));
-        sum += dot(srgbToLinear(texture(u_src, pos / u_srcSize).rgb), LUMA);
+        sum += srgbToLinear(texture(u_src, pos / u_srcSize).rgb);
         count += 1.0;
       }
     }
   }
-  outColor = vec4(linearToSrgb1(sum / count), 0.0, 0.0, 1.0);
+  vec3 avg = sum / count;
+  outColor = u_keepColor == 1 ? vec4(linearToSrgb(avg), 1.0) : vec4(linearToSrgb1(dot(avg, LUMA)), 0.0, 0.0, 1.0);
 }
 `
 
@@ -71,16 +73,16 @@ uniform vec2 u_step;   // 一個像素的 uv 位移，只有模糊方向那一�
 uniform float u_sigma;
 void main() {
   int radius = int(ceil(u_sigma * 3.0));
-  float sum = 0.0;
+  vec3 sum = vec3(0.0);
   float weights = 0.0;
   for (int i = -24; i <= 24; i++) {
     if (i < -radius || i > radius) continue;
     float x = float(i);
     float w = exp(-(x * x) / (2.0 * u_sigma * u_sigma));
-    sum += texture(u_src, v_uv + u_step * x).r * w;
+    sum += texture(u_src, v_uv + u_step * x).rgb * w;
     weights += w;
   }
-  outColor = vec4(sum / weights, 0.0, 0.0, 1.0);
+  outColor = vec4(sum / weights, 1.0);
 }
 `
 
@@ -100,7 +102,10 @@ uniform sampler2D u_textureBase;  // 目標自己的模糊亮度（紋理用）
 uniform sampler2D u_sharpenBase;  // 目標自己的模糊亮度（銳化用）
 uniform sampler2D u_clarityBase;  // 整張照片的大範圍模糊亮度（清晰度、亮部陰影遮罩用）
 uniform sampler2D u_haze;         // 整張照片的暗通道
-uniform sampler2D u_curves;       // 1024×4：主曲線、紅、綠、藍
+uniform sampler2D u_curves;
+uniform sampler2D u_noiseBase;    // 目標自己的小範圍模糊亮度（明度雜訊用）
+uniform sampler2D u_chromaBase;   // 目標自己的模糊顏色（彩色雜訊用）
+uniform vec4 u_noise;             // 明度、明度細節、彩色、彩色細節（0..1）       // 1024×4：主曲線、紅、綠、藍
 
 uniform vec4 u_region;     // 目標（來源的一塊）在整張原圖中的位置（0..1）：xy 起點、zw 大小
 uniform mat3 u_geometry;   // 輸出 uv → 原圖 uv（裁切、拉直、旋轉、翻轉），見 geometry.ts
@@ -267,7 +272,27 @@ void main() {
   contrast = clamp(contrast, -1.0, 1.0);
   dehaze = clamp(dehaze, -1.0, 1.0);
 
-  // 局部對比用的 log 亮度都取自原圖，和曝光、白平衡無關，所以只要算一次
+  // 彩色雜訊：顏色（色度）換成附近平均的顏色，亮度不動。細節越高，色差大的地方（真的色彩邊緣）越保留
+  if (u_noise.z > 0.0) {
+    vec3 base = srgbToLinear(texture(u_chromaBase, tileUv).rgb);
+    float ys = dot(lin, LUMA);
+    vec3 chromaBase = base / max(dot(base, LUMA), 1e-4);
+    vec3 chromaSrc = lin / max(ys, 1e-4);
+    float keep = u_noise.w * smoothstep(0.08, 0.8, length(chromaSrc - chromaBase));
+    lin = mix(lin, chromaBase * ys, u_noise.z * (1.0 - keep));
+  }
+  // 明度雜訊：和附近平均差一點點的是雜訊，抹平；差很多的是邊緣與細節，保留。細節越高門檻越低
+  if (u_noise.x > 0.0) {
+    float ys = dot(lin, LUMA);
+    float yb = srgbToLinear1(texture(u_noiseBase, tileUv).r);
+    float d = abs(log2(ys + LOG_EPS) - log2(yb + LOG_EPS));
+    float threshold = mix(1.6, 0.2, u_noise.y);
+    float w = u_noise.x * (1.0 - smoothstep(threshold * 0.6, threshold * 1.2, d));
+    lin *= mix(1.0, (yb + 1e-5) / (ys + 1e-5), w);
+  }
+
+  // 局部對比用的 log 亮度取自降噪後的原圖，和曝光、白平衡無關，所以只要算一次；
+  // 用降噪後的值，銳化才不會把剛抹掉的雜訊又加回來
   float sourceLog = log2(dot(lin, LUMA) + LOG_EPS);
   float textureLog = log2(srgbToLinear1(texture(u_textureBase, tileUv).r) + LOG_EPS);
   float sharpenLog = log2(srgbToLinear1(texture(u_sharpenBase, tileUv).r) + LOG_EPS);

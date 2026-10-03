@@ -1,4 +1,5 @@
-import { useId, useRef, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import { useT } from '@/i18n/i18n'
 
 interface Props {
   id?: string
@@ -36,6 +37,7 @@ interface Gesture {
  * - 輕點不改數值，雙擊歸零
  * - 滑鼠照一般滑桿：點哪裡跳到哪裡
  * 整列（標籤、數值、軌道）都能拖，不用瞄準細細的軌道。
+ * 點右邊的數字可以直接打數值。
  */
 export function TouchSlider({ id, value, min, max, step, label, valueText, track, onChange, onCommit, onReset }: Props) {
   const labelId = useId()
@@ -132,32 +134,48 @@ export function TouchSlider({ id, value, min, max, step, label, valueText, track
 
   const percent = ((value - min) / (max - min)) * 100
 
+  // 外層接拖曳手勢（整列都能拖）；滑桿角色、鍵盤操作在軌道那層，數字輸入框才不會被包在滑桿裡
   return (
     <div
-      id={id}
-      role="slider"
-      tabIndex={0}
-      aria-labelledby={labelId}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={value}
-      aria-valuetext={valueText}
-      className="cursor-pointer touch-pan-y rounded-md py-2 outline-none select-none focus-visible:ring-2 focus-visible:ring-ring/60"
+      className="cursor-pointer touch-pan-y rounded-md py-2 select-none"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endGesture}
       onPointerCancel={endGesture}
-      onKeyDown={onKeyDown}
-      onKeyUp={onCommit}
       onDoubleClick={onReset}
     >
       <div className="flex items-center justify-between text-xs">
         <span id={labelId} className="text-muted-foreground">
           {label}
         </span>
-        <span className="tabular-nums">{valueText}</span>
+        <ValueInput
+          value={value}
+          step={step}
+          valueText={valueText}
+          label={label}
+          onSubmit={(v) => {
+            const next = snap(v)
+            if (next !== value) {
+              onChange(next)
+              onCommit()
+            }
+          }}
+        />
       </div>
-      <div ref={trackRef} className="relative mt-2 h-4">
+      <div
+        ref={trackRef}
+        id={id}
+        role="slider"
+        tabIndex={0}
+        aria-labelledby={labelId}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
+        aria-valuetext={valueText}
+        className="relative mt-2 h-4 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+        onKeyDown={onKeyDown}
+        onKeyUp={onCommit}
+      >
         <div
           className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
           style={{ background: track ?? 'oklch(1 0 0 / 18%)' } as CSSProperties}
@@ -168,5 +186,71 @@ export function TouchSlider({ id, value, min, max, step, label, valueText, track
         />
       </div>
     </div>
+  )
+}
+
+// 數值的小數位數跟著 step
+function decimals(step: number) {
+  return step >= 1 ? 0 : step >= 0.1 ? 1 : 2
+}
+
+// 右上角的數字：點一下變成輸入框，Enter 或離開欄位套用，Esc 取消
+function ValueInput({
+  value,
+  step,
+  valueText,
+  label,
+  onSubmit,
+}: {
+  value: number
+  step: number
+  valueText: string
+  label: ReactNode
+  onSubmit: (value: number) => void
+}) {
+  const t = useT()
+  const [draft, setDraft] = useState<string | null>(null)
+  const name = typeof label === 'string' ? label : ''
+  // 輸入框裡的操作不要被外層當成拖曳、雙擊歸零或滑桿的方向鍵
+  const stop = { onPointerDown: (e: PointerEvent) => e.stopPropagation(), onDoubleClick: (e: { stopPropagation: () => void }) => e.stopPropagation() }
+
+  if (draft === null) {
+    return (
+      <button
+        type="button"
+        aria-label={t.common.typeValue(name)}
+        className="-mr-1 rounded px-1 tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/60 pointer-coarse:py-1"
+        {...stop}
+        onClick={() => setDraft(value.toFixed(decimals(step)))}
+      >
+        {valueText}
+      </button>
+    )
+  }
+
+  function submit(text: string) {
+    setDraft(null)
+    const parsed = Number(text.trim().replace(',', '.'))
+    if (text.trim() !== '' && Number.isFinite(parsed)) onSubmit(parsed)
+  }
+
+  return (
+    <input
+      autoFocus
+      type="text"
+      inputMode="decimal"
+      aria-label={t.common.typeValue(name)}
+      className="h-6 w-16 rounded border border-ring bg-input/30 px-1 text-right text-xs text-foreground tabular-nums outline-none pointer-coarse:h-8"
+      value={draft}
+      {...stop}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => submit(e.currentTarget.value)}
+      onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') e.currentTarget.blur()
+        else if (e.key === 'Escape') setDraft(null)
+      }}
+    />
   )
 }

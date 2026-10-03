@@ -59,6 +59,10 @@ const DIRECT_KEYS: Record<string, ScalarKey> = {
   Sharpness: 'sharpenAmount',
   SharpenRadius: 'sharpenRadius',
   SharpenDetail: 'sharpenDetail',
+  LuminanceSmoothing: 'noiseLuminance',
+  LuminanceNoiseReductionDetail: 'noiseLuminanceDetail',
+  ColorNoiseReduction: 'noiseColor',
+  ColorNoiseReductionDetail: 'noiseColorDetail',
   SharpenEdgeMasking: 'sharpenMasking',
 
   PostCropVignetteAmount: 'vignetteAmount',

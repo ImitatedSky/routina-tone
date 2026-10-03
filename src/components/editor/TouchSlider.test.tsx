@@ -66,4 +66,33 @@ describe('TouchSlider with mouse and keyboard', () => {
     fireEvent.doubleClick(slider)
     expect(slider).toHaveAttribute('aria-valuenow', '0')
   })
+
+  it('accepts a typed value, snapped and clamped, as one commit', () => {
+    const { slider, onCommit } = setup()
+    fireEvent.click(screen.getByRole('button', { name: '輸入對比的數值' }))
+    const input = screen.getByRole('textbox', { name: '輸入對比的數值' })
+    fireEvent.change(input, { target: { value: '42.6' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.blur(input)
+    expect(slider).toHaveAttribute('aria-valuenow', '43')
+    expect(onCommit).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '輸入對比的數值' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '999' } })
+    fireEvent.blur(screen.getByRole('textbox'))
+    expect(slider).toHaveAttribute('aria-valuenow', '100')
+  })
+
+  it('ignores junk and Escape', () => {
+    const { slider } = setup()
+    fireEvent.click(screen.getByRole('button', { name: '輸入對比的數值' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'abc' } })
+    fireEvent.blur(screen.getByRole('textbox'))
+    expect(slider).toHaveAttribute('aria-valuenow', '0')
+    fireEvent.click(screen.getByRole('button', { name: '輸入對比的數值' }))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '50' } })
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
+    expect(slider).toHaveAttribute('aria-valuenow', '0')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
 })

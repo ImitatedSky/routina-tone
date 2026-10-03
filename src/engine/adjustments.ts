@@ -47,6 +47,11 @@ export type ScalarKey =
   | 'sharpenRadius'
   | 'sharpenDetail'
   | 'sharpenMasking'
+  // 雜色減少（Lightroom 細節面板的 Noise Reduction）
+  | 'noiseLuminance'
+  | 'noiseLuminanceDetail'
+  | 'noiseColor'
+  | 'noiseColorDetail'
   // 效果
   | 'vignetteAmount'
   | 'vignetteMidpoint'
@@ -141,6 +146,11 @@ const SPECS = {
   // Lightroom 的「細節」：越低越壓抑大邊緣的光暈，越高越強調細紋理
   sharpenDetail: { ...POSITIVE, default: 25 },
   sharpenMasking: POSITIVE,
+
+  noiseLuminance: POSITIVE,
+  noiseLuminanceDetail: { ...POSITIVE, default: 50 },
+  noiseColor: POSITIVE,
+  noiseColorDetail: { ...POSITIVE, default: 50 },
 
   vignetteAmount: PERCENT,
   vignetteMidpoint: { ...POSITIVE, default: 50 },

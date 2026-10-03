@@ -7,6 +7,7 @@ const zh = {
   save: '儲存',
   cancel: '取消',
   close: '關閉',
+  typeValue: (name: string) => `輸入${name}的數值`,
 }
 
 export const common = {
@@ -19,5 +20,6 @@ export const common = {
     save: 'Save',
     cancel: 'Cancel',
     close: 'Close',
+    typeValue: (name: string) => `Type a value for ${name}`,
   } satisfies typeof zh,
 }

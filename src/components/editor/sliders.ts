@@ -38,6 +38,13 @@ export const SHARPEN_SLIDERS: SliderSpec[] = [
   { key: 'sharpenMasking' },
 ]
 
+export const NOISE_SLIDERS: SliderSpec[] = [
+  { key: 'noiseLuminance' },
+  { key: 'noiseLuminanceDetail' },
+  { key: 'noiseColor' },
+  { key: 'noiseColorDetail' },
+]
+
 export const VIGNETTE_SLIDERS: SliderSpec[] = [
   { key: 'vignetteAmount', track: 'linear-gradient(to right, #111, #777, #eee)' },
   { key: 'vignetteMidpoint' },

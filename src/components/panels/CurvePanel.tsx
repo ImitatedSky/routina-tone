@@ -7,6 +7,7 @@ import { useEditor } from '@/editor/editorStore'
 import { useT } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { CurveEditor, type GhostCurve } from './CurveEditor'
+import { NumberField } from './NumberField'
 
 const CHANNEL_COLORS: Record<CurveChannel, string> = {
   rgb: 'oklch(0.93 0 0)',
@@ -72,6 +73,21 @@ export function CurvePanel() {
     setSelected(null)
   }
 
+  // 直接打數字改選取的點：輸入值夾在左右兩點之間（端點也照樣保持順序），輸出值 0..255
+  function setSelectedPoint(index: 0 | 1, value: number) {
+    if (selected === null) return
+    const next = points.map((p) => [...p] as [number, number])
+    if (index === 0) {
+      const lo = selected > 0 ? points[selected - 1][0] + 1 : 0
+      const hi = selected < points.length - 1 ? points[selected + 1][0] - 1 : 255
+      next[selected][0] = Math.min(hi, Math.max(lo, value))
+    } else {
+      next[selected][1] = Math.min(255, Math.max(0, value))
+    }
+    setCurve(channel, next)
+    commit()
+  }
+
   function removeSelected() {
     if (selected === null || isEndpoint) return
     setCurve(channel, points.filter((_, i) => i !== selected))
@@ -118,12 +134,23 @@ export function CurvePanel() {
             onCommit={commit}
           />
         </div>
-        <div className="mt-2 flex h-7 items-center justify-between text-xs">
+        <div className="mt-2 flex min-h-7 items-center justify-between text-xs">
           {selectedPoint ? (
             <>
-              <span className="text-muted-foreground tabular-nums">
-                {text.input} <span className="text-foreground">{selectedPoint[0]}</span> → {text.output}{' '}
-                <span className="text-foreground">{selectedPoint[1]}</span>
+              <span className="flex items-center gap-2">
+                <NumberField
+                  label={text.input}
+                  value={Math.round(selectedPoint[0])}
+                  normalize={(v) => Math.min(255, Math.max(0, v))}
+                  onSubmit={(v) => setSelectedPoint(0, v)}
+                />
+                <span className="text-muted-foreground">→</span>
+                <NumberField
+                  label={text.output}
+                  value={Math.round(selectedPoint[1])}
+                  normalize={(v) => Math.min(255, Math.max(0, v))}
+                  onSubmit={(v) => setSelectedPoint(1, v)}
+                />
               </span>
               <Button variant="ghost" size="xs" disabled={isEndpoint} onClick={removeSelected}>
                 {t.common.delete}

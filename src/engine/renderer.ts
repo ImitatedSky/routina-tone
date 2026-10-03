@@ -14,6 +14,9 @@ export class RendererError extends Error {}
 
 // 模糊半徑都以「照片長邊」的比例定義，預覽和匯出看起來才會一樣
 const TEXTURE_SIGMA = 0.0025
+// 雜訊是像素等級的，所以降噪的模糊半徑以原圖像素為單位
+const NOISE_LUMA_SIGMA = 2
+const NOISE_COLOR_SIGMA = 4
 const CLARITY_SIGMA = 0.012
 // 去霧分析用的縮圖長邊
 const HAZE_SIZE = 512
@@ -51,7 +54,7 @@ interface Target {
 // 分塊匯出時，每塊要多讀進來的邊（原圖像素），邊緣的模糊才會和整張一起算時一樣
 export function tileMargin(adj: Adjustments, image: ImageSize): number {
   const longEdge = Math.max(image.width, image.height)
-  return Math.ceil(3 * Math.max(TEXTURE_SIGMA * longEdge, adj.sharpenRadius)) + 4
+  return Math.ceil(3 * Math.max(TEXTURE_SIGMA * longEdge, adj.sharpenRadius, NOISE_COLOR_SIGMA)) + 4
 }
 
 /**
@@ -77,6 +80,9 @@ export class Renderer {
 
   private image: WebGLTexture | null = null
   private textureBase: Target | null = null
+  // 降噪用：小範圍的模糊亮度、模糊顏色
+  private noiseBase: Target | null = null
+  private chromaBase: Target | null = null
   private sharpenBase: Target | null = null
   private sharpenRadius = -1
   private region: Region = { x: 0, y: 0, width: 1, height: 1 }
@@ -188,6 +194,11 @@ export class Renderer {
       bitmap.height,
       TEXTURE_SIGMA * Math.max(image.width, image.height) * scale,
     )
+    // 預覽是縮圖，原圖幾個像素的雜訊在縮圖上不到一個像素；給個下限，預覽才看得出降噪的效果
+    this.deleteTarget(this.noiseBase)
+    this.noiseBase = this.blurLuma(this.image, bitmap.width, bitmap.height, Math.max(0.5, NOISE_LUMA_SIGMA * scale))
+    this.deleteTarget(this.chromaBase)
+    this.chromaBase = this.blurLuma(this.image, bitmap.width, bitmap.height, Math.max(1, NOISE_COLOR_SIGMA * scale), true)
     this.deleteTarget(this.sharpenBase)
     this.sharpenBase = null
     this.sharpenRadius = -1
@@ -199,7 +210,7 @@ export class Renderer {
    * - outRegion：要畫輸出的哪一塊（0..1）；分塊匯出時才用，預覽是整張
    */
   render(adj: Adjustments, options: { crop?: CropRect; outRegion?: CropRect; showMask?: number } = {}) {
-    if (!this.image || !this.textureBase || !this.clarityBase || !this.haze) return
+    if (!this.image || !this.textureBase || !this.noiseBase || !this.chromaBase || !this.clarityBase || !this.haze) return
     const { gl } = this
     const crop = options.crop
     const outRegion = options.outRegion ?? FULL_CROP
@@ -239,6 +250,9 @@ export class Renderer {
     this.draw(this.develop, {
       u_image: this.image,
       u_textureBase: this.textureBase.texture,
+      u_noiseBase: this.noiseBase.texture,
+      u_chromaBase: this.chromaBase.texture,
+      u_noise: [adj.noiseLuminance / 100, adj.noiseLuminanceDetail / 100, adj.noiseColor / 100, adj.noiseColorDetail / 100],
       u_sharpenBase: this.sharpenBase.texture,
       u_clarityBase: this.clarityBase.texture,
       u_haze: this.haze,
@@ -330,7 +344,9 @@ export class Renderer {
   dispose() {
     const { gl } = this
     for (const t of [this.image, this.haze, this.curves, this.brush]) if (t) gl.deleteTexture(t)
-    for (const t of [this.clarityBase, this.textureBase, this.sharpenBase, this.histogramTarget]) this.deleteTarget(t)
+    for (const t of [this.clarityBase, this.textureBase, this.noiseBase, this.chromaBase, this.sharpenBase, this.histogramTarget]) {
+      this.deleteTarget(t)
+    }
     this.image = null
     // 主動釋放 GPU 記憶體，不等 GC（匯出時的全尺寸貼圖很大）
     gl.getExtension('WEBGL_lose_context')?.loseContext()
@@ -396,14 +412,14 @@ export class Renderer {
     if (target) gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
 
-  // 亮度的高斯模糊。sigma 大時先縮小再模糊（大範圍模糊只剩低頻，縮小不會失真）
-  private blurLuma(source: WebGLTexture, width: number, height: number, sigma: number): Target {
+  // 亮度（keepColor 時是顏色）的高斯模糊。sigma 大時先縮小再模糊（大範圍模糊只剩低頻，縮小不會失真）
+  private blurLuma(source: WebGLTexture, width: number, height: number, sigma: number, keepColor = false): Target {
     let factor = 1
     while (sigma / factor > MAX_BLUR_SIGMA && factor < 16) factor *= 2
     const w = Math.max(1, Math.ceil(width / factor))
     const h = Math.max(1, Math.ceil(height / factor))
     const result = this.createTarget(w, h)
-    this.draw(this.lumaDown, { u_src: source, u_srcSize: [width, height], u_factor: factor }, result)
+    this.draw(this.lumaDown, { u_src: source, u_srcSize: [width, height], u_factor: factor, u_keepColor: keepColor ? 1 : 0 }, result)
 
     const s = sigma / factor
     if (s >= 0.3) {

@@ -234,6 +234,18 @@ describe('parseXmpPreset', () => {
     expect(parseXmpPreset(text, 'x.xmp').adjustments).toEqual({ ...DEFAULT_ADJUSTMENTS, vignetteHighlights: 100 })
   })
 
+  it('maps Lightroom noise reduction', () => {
+    const text = wrap(`<rdf:Description rdf:about="" xmlns:crs="${CRS}"
+      crs:LuminanceSmoothing="30" crs:LuminanceNoiseReductionDetail="60"
+      crs:ColorNoiseReduction="25" crs:ColorNoiseReductionDetail="40"/>`)
+    expect(parseXmpPreset(text, 'x.xmp').adjustments).toMatchObject({
+      noiseLuminance: 30,
+      noiseLuminanceDetail: 60,
+      noiseColor: 25,
+      noiseColorDetail: 40,
+    })
+  })
+
   it('uses legacy split toning when there is no color grading', () => {
     const text = wrap(`<rdf:Description rdf:about="" xmlns:crs="${CRS}"
       crs:SplitToningShadowHue="200"

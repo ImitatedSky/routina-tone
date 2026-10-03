@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { SliderSection } from './SliderSection'
 import {
   GRAIN_SLIDERS,
+  NOISE_SLIDERS,
   PRESENCE_EFFECT_SLIDERS,
   PRESENCE_SLIDERS,
   SHARPEN_SLIDERS,
@@ -71,6 +72,7 @@ export function EditPanel() {
         <TabsContent value="effects" className={PANEL}>
           <SliderSection title={sections.appearance} sliders={withLabels(PRESENCE_EFFECT_SLIDERS, t)} />
           <SliderSection title={sections.sharpening} sliders={withLabels(SHARPEN_SLIDERS, t)} />
+          <SliderSection title={sections.noiseReduction} sliders={withLabels(NOISE_SLIDERS, t)} />
           <SliderSection title={sections.vignette} sliders={withLabels(VIGNETTE_SLIDERS, t)} />
           <SliderSection title={sections.grain} sliders={withLabels(GRAIN_SLIDERS, t)} />
         </TabsContent>
