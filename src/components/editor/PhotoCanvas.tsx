@@ -9,6 +9,7 @@ import { useEditor, useView } from '@/editor/editorStore'
 import { useT } from '@/i18n/i18n'
 import { Histogram } from './Histogram'
 import { useZoomGestures } from './useZoomGestures'
+import { pixelate } from '@/photo/pixelArt'
 
 // 直方圖不必每一格拖曳都更新，太頻繁反而拖慢手機
 const HISTOGRAM_INTERVAL = 120
@@ -27,11 +28,12 @@ interface DrawView {
   showMask: number
 }
 
-// 看原圖時拿掉調色與遮罩，裁切與拉直保留，比較的才是同一個畫面
-function draw(renderer: Renderer, adjustments: Adjustments, view: DrawView) {
+// 看原圖時拿掉調色與遮罩，裁切與拉直保留，比較的才是同一個畫面。回傳實際畫的參數
+function draw(renderer: Renderer, adjustments: Adjustments, view: DrawView): Adjustments {
   const adj = view.showOriginal ? { ...applyStyle(adjustments, DEFAULT_ADJUSTMENTS), masks: [] } : adjustments
   // 裁切模式畫整個畫框，裁切框另外疊在上面
   renderer.render(adj, { crop: view.cropMode ? FULL_CROP : undefined, showMask: view.showOriginal ? -1 : view.showMask })
+  return adj
 }
 
 function currentView(adjustments: Adjustments): DrawView {
@@ -49,6 +51,9 @@ export function PhotoCanvas() {
   // 畫布放在這一層，縮放平移時只變換這一層；手勢由外面的 containerRef 接
   const zoomRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<Renderer | null>(null)
+  // 像素畫模式時，WebGL 畫布藏起來，改顯示這張「一格一像素」的小畫布（CSS 用 pixelated 放大，不內插）
+  const glCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const pixelCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastHistogramRef = useRef(0)
   const histogramTimerRef = useRef<number | undefined>(undefined)
   const [supported] = useState(supportsWebGL2)
@@ -71,6 +76,12 @@ export function PhotoCanvas() {
     canvas.className = 'absolute inset-0 m-auto max-h-full max-w-full'
     zoomRef.current!.appendChild(canvas)
     rendererRef.current = new Renderer(canvas)
+    glCanvasRef.current = canvas
+    const pixelCanvas = document.createElement('canvas')
+    pixelCanvas.className = 'pointer-events-none absolute inset-0 m-auto hidden'
+    pixelCanvas.style.imageRendering = 'pixelated'
+    zoomRef.current!.appendChild(pixelCanvas)
+    pixelCanvasRef.current = pixelCanvas
 
     // 畫布大小會隨裁切改變，外框也會隨視窗改變；兩者都要重新對齊裁切框
     const measure = () => {
@@ -89,6 +100,7 @@ export function PhotoCanvas() {
       rendererRef.current?.dispose()
       rendererRef.current = null
       canvas.remove()
+      pixelCanvas.remove()
     }
   }, [supported])
 
@@ -107,27 +119,47 @@ export function PhotoCanvas() {
   useEffect(() => {
     const renderer = rendererRef.current
     if (!renderer) return
+    // 直方圖、像素畫都要在畫完的同一個工作裡讀畫布；太密集時延後到停手後再補一次
+    const afterDraw = (used: Adjustments) => {
+      const view = useView.getState()
+      const gl = glCanvasRef.current
+      const pixelCanvas = pixelCanvasRef.current
+      if (gl && pixelCanvas) {
+        // 裁切、遮罩模式要對齊把手，照常顯示 WebGL 畫面
+        const showPixels = used.pixelOn === 1 && !view.cropMode && !view.maskMode
+        if (showPixels) {
+          const art = pixelate(gl, gl.width, gl.height, used)
+          pixelCanvas.width = art.width
+          pixelCanvas.height = art.height
+          pixelCanvas.getContext('2d')!.putImageData(art, 0, 0)
+          pixelCanvas.style.width = `${gl.clientWidth}px`
+          pixelCanvas.style.height = `${gl.clientHeight}px`
+        }
+        pixelCanvas.classList.toggle('hidden', !showPixels)
+        gl.style.visibility = showPixels ? 'hidden' : ''
+      }
+      if (view.showHistogram) view.setHistogram(renderer.readHistogram())
+    }
+
+    let used: Adjustments
     try {
-      draw(renderer, adjustments, currentView(adjustments))
+      used = draw(renderer, adjustments, currentView(adjustments))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
       return
     }
-    if (!showHistogram) return
 
-    // 直方圖要在畫完的同一個工作裡讀；太密集時延後到停手後再補一次
-    const { setHistogram } = useView.getState()
     const now = performance.now()
     window.clearTimeout(histogramTimerRef.current)
     if (now - lastHistogramRef.current >= HISTOGRAM_INTERVAL) {
       lastHistogramRef.current = now
-      setHistogram(renderer.readHistogram())
+      afterDraw(used)
     } else {
       histogramTimerRef.current = window.setTimeout(() => {
         const latest = useEditor.getState().adjustments
-        draw(renderer, latest, currentView(latest))
+        const drawn = draw(renderer, latest, currentView(latest))
         lastHistogramRef.current = performance.now()
-        setHistogram(renderer.readHistogram())
+        afterDraw(drawn)
       }, HISTOGRAM_INTERVAL)
     }
   }, [photo, adjustments, showOriginal, showHistogram, cropMode, maskMode, showMask, selectedMask])

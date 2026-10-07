@@ -1,0 +1,63 @@
+// 像素畫分頁
+const zh = {
+  enable: '轉成像素畫',
+  intro: '每一格就是一個像素、只有一個顏色，而且對齊格線；匯出 PNG 時只用整數倍放大，不會模糊。',
+  grid: '格數',
+  gridValue: (w: number, h: number) => `${w} × ${h}`,
+  palette: '調色盤',
+  palettes: {
+    auto: '自動減色',
+    console16: '16 位元主機',
+    gameboy: 'Game Boy',
+    pico8: 'PICO-8',
+    nes: 'NES',
+  },
+  paletteHint: {
+    auto: '從照片挑出最有代表性的顏色',
+    console16: '像 SNES：顏色只有 32768 種，再限制色數',
+    gameboy: '經典的四階綠',
+    pico8: 'PICO-8 固定 16 色',
+    nes: '紅白機的固定色票',
+  },
+  colors: '色數',
+  dither: '抖色',
+  dithers: { none: '無', ordered: '網點', diffusion: '擴散' },
+  ditherHint: '用顏色交錯的點模擬中間色，色數少時特別有用',
+  scale: '匯出倍率',
+  scaleValue: (scale: number, w: number, h: number) => `×${scale}（${w} × ${h}）`,
+  run: '匯出 PNG',
+  exportPng: (w: number, h: number, scale: number) => `像素畫 PNG：${w} × ${h}，每格 ${scale} × ${scale} 像素。`,
+}
+
+export const pixel = {
+  'zh-Hant': zh,
+  en: {
+    enable: 'Pixel art',
+    intro: 'Every cell is one pixel of a single color, aligned to the grid. PNG export only scales by whole numbers, so it never blurs.',
+    grid: 'Grid width',
+    gridValue: (w: number, h: number) => `${w} × ${h}`,
+    palette: 'Palette',
+    palettes: {
+      auto: 'Auto',
+      console16: '16-bit console',
+      gameboy: 'Game Boy',
+      pico8: 'PICO-8',
+      nes: 'NES',
+    },
+    paletteHint: {
+      auto: 'Picks the most representative colors from the photo',
+      console16: 'Like the SNES: 32,768 possible colors, then limited',
+      gameboy: 'The classic four shades of green',
+      pico8: 'The fixed PICO-8 16-color palette',
+      nes: 'The fixed NES palette',
+    },
+    colors: 'Colors',
+    dither: 'Dithering',
+    dithers: { none: 'None', ordered: 'Pattern', diffusion: 'Diffusion' },
+    ditherHint: 'Mixes dots of two colors to fake in-between shades; most useful with few colors',
+    scale: 'Export scale',
+    scaleValue: (scale: number, w: number, h: number) => `×${scale} (${w} × ${h})`,
+    run: 'Export PNG',
+    exportPng: (w: number, h: number, scale: number) => `Pixel art PNG: ${w} × ${h}, each cell ${scale} × ${scale} pixels.`,
+  } satisfies typeof zh,
+}

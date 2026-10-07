@@ -9,6 +9,7 @@ const zh = {
     effects: '效果',
     masks: '遮罩',
     crop: '裁切',
+    pixel: '像素',
     presets: '預設集',
   },
   sections: {
@@ -131,6 +132,7 @@ export const editor = {
       effects: 'Effects',
       masks: 'Masking',
       crop: 'Crop',
+      pixel: 'Pixel',
       presets: 'Presets',
     },
     sections: {

@@ -4,6 +4,7 @@ import { editor } from './messages/editor'
 import { masks } from './messages/masks'
 import { panels } from './messages/panels'
 import { photo } from './messages/photo'
+import { pixel } from './messages/pixel'
 import { presets } from './messages/presets'
 
 // 介面語言。字串依功能分檔放在 messages/，每個檔案的英文版用 `satisfies typeof zh`
@@ -12,7 +13,7 @@ import { presets } from './messages/presets'
 export type Locale = 'zh-Hant' | 'en'
 export type LanguagePref = 'system' | Locale
 
-const NAMESPACES = { common, editor, masks, panels, photo, presets }
+const NAMESPACES = { common, editor, masks, panels, photo, pixel, presets }
 
 export type Messages = { [K in keyof typeof NAMESPACES]: (typeof NAMESPACES)[K]['zh-Hant'] }
 

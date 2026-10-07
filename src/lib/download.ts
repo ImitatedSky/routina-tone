@@ -16,3 +16,8 @@ export function safeFilename(name: string): string {
 export function baseName(filename: string): string {
   return filename.replace(/\.[^.]+$/, '')
 }
+
+// 匯出的檔名：原檔名-tone.jpg，像素畫是 PNG
+export function exportName(original: string, blob: Blob): string {
+  return `${safeFilename(baseName(original))}-tone.${blob.type === 'image/png' ? 'png' : 'jpg'}`
+}

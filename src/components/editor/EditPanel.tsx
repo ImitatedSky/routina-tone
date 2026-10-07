@@ -1,5 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CropPanel } from '@/components/crop/CropPanel'
+import { PixelPanel } from '@/components/pixel/PixelPanel'
 import { MaskPanel } from '@/components/masks/MaskPanel'
 import { CurvePanel } from '@/components/panels/CurvePanel'
 import { GradingPanel } from '@/components/panels/GradingPanel'
@@ -21,7 +22,7 @@ import {
   withLabels,
 } from './sliders'
 
-const TABS = ['light', 'color', 'curve', 'mixer', 'grading', 'effects', 'masks', 'crop', 'presets'] as const
+const TABS = ['light', 'color', 'curve', 'mixer', 'grading', 'effects', 'masks', 'crop', 'pixel', 'presets'] as const
 
 const PANEL = 'overflow-y-auto pb-4'
 
@@ -81,6 +82,9 @@ export function EditPanel() {
         </TabsContent>
         <TabsContent value="crop" className={PANEL}>
           <CropPanel />
+        </TabsContent>
+        <TabsContent value="pixel" className={PANEL}>
+          <PixelPanel />
         </TabsContent>
         <TabsContent value="presets" className={PANEL}>
           <PresetPanel />

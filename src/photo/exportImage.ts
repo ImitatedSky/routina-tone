@@ -3,6 +3,7 @@ import { outputSize, outputToSource, sourceBounds } from '@/engine/geometry'
 import { Renderer, tileMargin } from '@/engine/renderer'
 import { t } from '@/i18n/i18n'
 import { PREVIEW_MAX_EDGE, decodeImage, resizeImage } from './decode'
+import { enlarge, pixelate } from './pixelArt'
 
 export interface ExportResult {
   blob: Blob
@@ -15,14 +16,15 @@ export interface ExportResult {
 const MAX_TILE = 2560
 
 /**
- * 用原圖重新跑一次同樣的調色，輸出 JPEG。
+ * 用原圖重新跑一次同樣的調色，輸出 JPEG；開了像素畫時輸出 PNG
+ * （每一格整數倍、最近鄰放大，PNG 無損，格線不會被壓縮糊掉）。
  *
  * 在「輸出（裁切後）」上分塊：每塊算出它對應到原圖的哪一塊（拉直後是斜的，取外接框），
  * 多讀一圈邊（tileMargin）讓模糊類效果在接縫處和整張一起算時一樣，渲染後拼回一張 2D canvas，
  * 所以不受 GPU 貼圖上限限制。大範圍的分析（清晰度底圖、去霧）用和預覽一樣大小的縮圖，
  * 匯出結果才會和預覽一致。
  */
-export async function exportJpeg(
+export async function exportImage(
   source: Blob,
   adj: Adjustments,
   quality: number,
@@ -75,6 +77,14 @@ export async function exportJpeg(
         }
         onProgress?.(row * columns + col + 1, rows * columns)
       }
+    }
+
+    if (adj.pixelOn) {
+      const art = enlarge(pixelate(output, out.width, out.height, adj), adj.pixelScale)
+      output.width = 0 // 盡早釋放原尺寸的畫布
+      const blob = await new Promise<Blob | null>((resolve) => art.toBlob(resolve, 'image/png'))
+      if (!blob) throw new Error(t().photo.pngEncodeFailed)
+      return { blob, width: art.width, height: art.height }
     }
 
     const blob = await new Promise<Blob | null>((resolve) => output.toBlob(resolve, 'image/jpeg', quality))

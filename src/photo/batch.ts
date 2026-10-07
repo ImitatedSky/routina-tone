@@ -1,7 +1,7 @@
 import { withoutGeometry, type Adjustments } from '@/engine/adjustments'
-import { baseName, safeFilename } from '@/lib/download'
+import { exportName } from '@/lib/download'
 import { saveFile } from '@/lib/saveFile'
-import { exportJpeg } from './exportJpeg'
+import { exportImage } from './exportImage'
 
 export interface BatchProgress {
   done: number
@@ -36,8 +36,8 @@ export async function runBatch(
     const file = files[i]
     options.onProgress?.({ done: i, total: files.length, current: file.name })
     try {
-      const { blob } = await exportJpeg(file, style, quality)
-      const saved = await saveFile(blob, `${safeFilename(baseName(file.name))}-tone.jpg`, 'image')
+      const { blob } = await exportImage(file, style, quality)
+      const saved = await saveFile(blob, exportName(file.name, blob), 'image')
       if (saved.status === 'saved') result.saved++
     } catch (error) {
       result.failures.push({ name: file.name, message: error instanceof Error ? error.message : String(error) })

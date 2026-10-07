@@ -61,6 +61,13 @@ export type ScalarKey =
   | 'grainAmount'
   | 'grainSize'
   | 'grainRoughness'
+  // 像素畫：開關、格數（橫向幾格）、調色盤、色數、抖色、輸出倍率
+  | 'pixelOn'
+  | 'pixelWidth'
+  | 'pixelPalette'
+  | 'pixelColors'
+  | 'pixelDither'
+  | 'pixelScale'
   // 幾何：裁切框（在轉正、旋轉後的畫面裡，0..1）、拉直角度、90° 旋轉次數、水平翻轉
   | 'cropX'
   | 'cropY'
@@ -161,6 +168,16 @@ const SPECS = {
   grainAmount: POSITIVE,
   grainSize: { ...POSITIVE, default: 25 },
   grainRoughness: { ...POSITIVE, default: 50 },
+
+  pixelOn: { min: 0, max: 1, step: 1, default: 0 },
+  pixelWidth: { min: 16, max: 512, step: 1, default: 160 },
+  // 對應 PALETTE_IDS 的順序：自動、16 位元主機、Game Boy、PICO-8、NES
+  pixelPalette: { min: 0, max: 4, step: 1, default: 0 },
+  pixelColors: { min: 2, max: 64, step: 1, default: 16 },
+  // 無、規則網點、誤差擴散
+  pixelDither: { min: 0, max: 2, step: 1, default: 0 },
+  // 匯出時每一格放大成幾 × 幾個像素（整數倍，格線才會對齊）
+  pixelScale: { min: 1, max: 16, step: 1, default: 1 },
 
   cropX: { min: 0, max: 1, step: 0.0001, default: 0 },
   cropY: { min: 0, max: 1, step: 0.0001, default: 0 },
