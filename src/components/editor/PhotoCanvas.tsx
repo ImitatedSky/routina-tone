@@ -6,6 +6,7 @@ import { DEFAULT_ADJUSTMENTS, applyStyle, type Adjustments } from '@/engine/adju
 import { FULL_CROP } from '@/engine/geometry'
 import { Renderer, supportsWebGL2 } from '@/engine/renderer'
 import { useEditor, useView } from '@/editor/editorStore'
+import { usePixelArt } from '@/editor/pixelArtStore'
 import { useT } from '@/i18n/i18n'
 import { Histogram } from './Histogram'
 import { useZoomGestures } from './useZoomGestures'
@@ -28,12 +29,16 @@ interface DrawView {
   showMask: number
 }
 
-// 看原圖時拿掉調色與遮罩，裁切與拉直保留，比較的才是同一個畫面。回傳實際畫的參數
-function draw(renderer: Renderer, adjustments: Adjustments, view: DrawView): Adjustments {
+// 看原圖時拿掉調色與遮罩，裁切與拉直保留，比較的才是同一個畫面
+function draw(renderer: Renderer, adjustments: Adjustments, view: DrawView) {
   const adj = view.showOriginal ? { ...applyStyle(adjustments, DEFAULT_ADJUSTMENTS), masks: [] } : adjustments
   // 裁切模式畫整個畫框，裁切框另外疊在上面
   renderer.render(adj, { crop: view.cropMode ? FULL_CROP : undefined, showMask: view.showOriginal ? -1 : view.showMask })
-  return adj
+}
+
+function inPixelTool(): boolean {
+  const v = useView.getState()
+  return v.workspace === 'tools' && v.tool === 'pixel'
 }
 
 function currentView(adjustments: Adjustments): DrawView {
@@ -41,7 +46,8 @@ function currentView(adjustments: Adjustments): DrawView {
   const index = v.maskMode ? adjustments.masks.findIndex((m) => m.id === v.selectedMask) : -1
   // 畫筆刷時一定要看得到畫到哪裡，所以筆刷遮罩不管開關都顯示紅色範圍（和 Lightroom 一樣）
   const visible = index >= 0 && (v.showMask || adjustments.masks[index].type === 'brush')
-  return { showOriginal: v.showOriginal, cropMode: v.cropMode, showMask: visible ? index : -1 }
+  // 像素畫的「原圖」是調好色、還沒變成像素的畫面
+  return { showOriginal: v.showOriginal && !inPixelTool(), cropMode: v.cropMode, showMask: visible ? index : -1 }
 }
 
 export function PhotoCanvas() {
@@ -51,7 +57,7 @@ export function PhotoCanvas() {
   // 畫布放在這一層，縮放平移時只變換這一層；手勢由外面的 containerRef 接
   const zoomRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<Renderer | null>(null)
-  // 像素畫模式時，WebGL 畫布藏起來，改顯示這張「一格一像素」的小畫布（CSS 用 pixelated 放大，不內插）
+  // 在像素畫工具裡，WebGL 畫布藏起來，改顯示這張「一格一像素」的小畫布（CSS 用 pixelated 放大，不內插）
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const pixelCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastHistogramRef = useRef(0)
@@ -68,6 +74,8 @@ export function PhotoCanvas() {
   const maskMode = useView((s) => s.maskMode)
   const showMask = useView((s) => s.showMask)
   const selectedMask = useView((s) => s.selectedMask)
+  const pixelTool = useView((s) => s.workspace === 'tools' && s.tool === 'pixel')
+  const pixelArt = usePixelArt((s) => s.settings)
 
   // canvas 每次掛載都重新建立：WebGL context 釋放後同一個 canvas 就不能再用了
   useEffect(() => {
@@ -120,15 +128,14 @@ export function PhotoCanvas() {
     const renderer = rendererRef.current
     if (!renderer) return
     // 直方圖、像素畫都要在畫完的同一個工作裡讀畫布；太密集時延後到停手後再補一次
-    const afterDraw = (used: Adjustments) => {
+    const afterDraw = () => {
       const view = useView.getState()
       const gl = glCanvasRef.current
       const pixelCanvas = pixelCanvasRef.current
       if (gl && pixelCanvas) {
-        // 裁切、遮罩模式要對齊把手，照常顯示 WebGL 畫面
-        const showPixels = used.pixelOn === 1 && !view.cropMode && !view.maskMode
+        const showPixels = inPixelTool() && !view.showOriginal
         if (showPixels) {
-          const art = pixelate(gl, gl.width, gl.height, used)
+          const art = pixelate(gl, gl.width, gl.height, usePixelArt.getState().settings)
           pixelCanvas.width = art.width
           pixelCanvas.height = art.height
           pixelCanvas.getContext('2d')!.putImageData(art, 0, 0)
@@ -141,9 +148,8 @@ export function PhotoCanvas() {
       if (view.showHistogram) view.setHistogram(renderer.readHistogram())
     }
 
-    let used: Adjustments
     try {
-      used = draw(renderer, adjustments, currentView(adjustments))
+      draw(renderer, adjustments, currentView(adjustments))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e))
       return
@@ -153,16 +159,16 @@ export function PhotoCanvas() {
     window.clearTimeout(histogramTimerRef.current)
     if (now - lastHistogramRef.current >= HISTOGRAM_INTERVAL) {
       lastHistogramRef.current = now
-      afterDraw(used)
+      afterDraw()
     } else {
       histogramTimerRef.current = window.setTimeout(() => {
         const latest = useEditor.getState().adjustments
-        const drawn = draw(renderer, latest, currentView(latest))
+        draw(renderer, latest, currentView(latest))
         lastHistogramRef.current = performance.now()
-        afterDraw(drawn)
+        afterDraw()
       }, HISTOGRAM_INTERVAL)
     }
-  }, [photo, adjustments, showOriginal, showHistogram, cropMode, maskMode, showMask, selectedMask])
+  }, [photo, adjustments, showOriginal, showHistogram, cropMode, maskMode, showMask, selectedMask, pixelTool, pixelArt])
 
   // 裁切、調遮罩時手指是在拖把手，不縮放也不比較原圖；換照片或換模式時回到原大小
   const { zoom, handlers } = useZoomGestures(containerRef, {

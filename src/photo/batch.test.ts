@@ -26,13 +26,6 @@ describe('runBatch', () => {
     expect(saveFile.mock.calls.map((c) => c[1])).toEqual(['a-tone.jpg', 'b-tone.jpg', 'c-tone.jpg'])
   })
 
-  it('names pixel art exports .png', async () => {
-    exportImage.mockResolvedValue({ blob: new Blob(['png'], { type: 'image/png' }), width: 1, height: 1 })
-    await runBatch(files.slice(0, 1), { ...DEFAULT_ADJUSTMENTS, pixelOn: 1 }, 0.9)
-    expect(saveFile.mock.calls[0][1]).toBe('a-tone.png')
-    expect(exportImage.mock.calls[0][1].pixelOn).toBe(1)
-  })
-
   it('keeps going after a failure and reports it', async () => {
     exportImage.mockRejectedValueOnce(new Error('bad file'))
     const result = await runBatch(files, DEFAULT_ADJUSTMENTS, 0.9)

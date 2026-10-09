@@ -1,6 +1,7 @@
-// 像素畫分頁
+// 像素畫工具
 const zh = {
-  enable: '轉成像素畫',
+  title: '像素畫',
+  summary: '轉成對齊格線的像素畫，可選復古調色盤，匯出 PNG',
   intro: '每一格就是一個像素、只有一個顏色，而且對齊格線；匯出 PNG 時只用整數倍放大，不會模糊。',
   grid: '格數',
   gridValue: (w: number, h: number) => `${w} × ${h}`,
@@ -32,7 +33,8 @@ const zh = {
 export const pixel = {
   'zh-Hant': zh,
   en: {
-    enable: 'Pixel art',
+    title: 'Pixel art',
+    summary: 'Turn the photo into grid-aligned pixel art with retro palettes, exported as PNG',
     intro: 'Every cell is one pixel of a single color, aligned to the grid. PNG export only scales by whole numbers, so it never blurs.',
     grid: 'Grid width',
     gridValue: (w: number, h: number) => `${w} × ${h}`,

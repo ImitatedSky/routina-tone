@@ -9,7 +9,6 @@ const zh = {
     effects: '效果',
     masks: '遮罩',
     crop: '裁切',
-    pixel: '像素',
     presets: '預設集',
   },
   sections: {
@@ -61,6 +60,14 @@ const zh = {
     hideHistogram: '隱藏直方圖',
     holdForOriginal: '按住看原圖',
     settings: '設定',
+  },
+  workspaces: {
+    label: '模式',
+    develop: '調色',
+    tools: '工具',
+  },
+  tools: {
+    back: '回到工具清單',
   },
   panel: {
     collapse: '收起操作面板',
@@ -117,6 +124,8 @@ const zh = {
     title: '設定',
     language: '語言',
     system: '跟隨系統',
+    display: '顯示',
+    histogram: '直方圖',
   },
 }
 
@@ -132,7 +141,6 @@ export const editor = {
       effects: 'Effects',
       masks: 'Masking',
       crop: 'Crop',
-      pixel: 'Pixel',
       presets: 'Presets',
     },
     sections: {
@@ -184,6 +192,14 @@ export const editor = {
       hideHistogram: 'Hide histogram',
       holdForOriginal: 'Hold to see the original',
       settings: 'Settings',
+    },
+    workspaces: {
+      label: 'Mode',
+      develop: 'Edit',
+      tools: 'Tools',
+    },
+    tools: {
+      back: 'Back to tools',
     },
     panel: {
       collapse: 'Hide controls',
@@ -240,6 +256,8 @@ export const editor = {
       title: 'Settings',
       language: 'Language',
       system: 'System default',
+      display: 'Display',
+      histogram: 'Histogram',
     },
   } satisfies typeof zh,
 }

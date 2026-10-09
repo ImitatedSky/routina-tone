@@ -1,6 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CropPanel } from '@/components/crop/CropPanel'
-import { PixelPanel } from '@/components/pixel/PixelPanel'
 import { MaskPanel } from '@/components/masks/MaskPanel'
 import { CurvePanel } from '@/components/panels/CurvePanel'
 import { GradingPanel } from '@/components/panels/GradingPanel'
@@ -22,7 +22,8 @@ import {
   withLabels,
 } from './sliders'
 
-const TABS = ['light', 'color', 'curve', 'mixer', 'grading', 'effects', 'masks', 'crop', 'pixel', 'presets'] as const
+const TABS = ['light', 'color', 'curve', 'mixer', 'grading', 'effects', 'masks', 'crop', 'presets'] as const
+type Tab = (typeof TABS)[number]
 
 const PANEL = 'overflow-y-auto pb-4'
 
@@ -31,19 +32,20 @@ export function EditPanel() {
   const { sections } = t.editor
   const setCropMode = useView((s) => s.setCropMode)
   const setMaskMode = useView((s) => s.setMaskMode)
-  // 收起時只隱藏、不卸載，分頁與捲動位置才會留著
+  // 收起或切到工具頁時只隱藏、不卸載，分頁與捲動位置才會留著
   const collapsed = useView((s) => s.panelCollapsed)
+  const active = useView((s) => s.workspace === 'develop')
+  const [tab, setTab] = useState<Tab>('light')
+
+  // 裁切框、遮罩把手只在調色頁的那個分頁顯示
+  useEffect(() => {
+    setCropMode(active && tab === 'crop')
+    setMaskMode(active && tab === 'masks')
+  }, [active, tab, setCropMode, setMaskMode])
 
   return (
-    <aside className={cn('flex h-[54%] shrink-0 flex-col md:h-auto md:w-80', collapsed && 'hidden')}>
-      <Tabs
-        defaultValue="light"
-        className="min-h-0 flex-1 gap-0"
-        onValueChange={(value) => {
-          setCropMode(value === 'crop')
-          setMaskMode(value === 'masks')
-        }}
-      >
+    <aside className={cn('flex h-[54%] shrink-0 flex-col md:h-auto md:w-80', (collapsed || !active) && 'hidden')}>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)} className="min-h-0 flex-1 gap-0">
         {/* 手機上分頁放不下，可以左右滑 */}
         <div className="overflow-x-auto px-3 pt-3 [scrollbar-width:none]">
           <TabsList className="w-max min-w-full">
@@ -82,9 +84,6 @@ export function EditPanel() {
         </TabsContent>
         <TabsContent value="crop" className={PANEL}>
           <CropPanel />
-        </TabsContent>
-        <TabsContent value="pixel" className={PANEL}>
-          <PixelPanel />
         </TabsContent>
         <TabsContent value="presets" className={PANEL}>
           <PresetPanel />

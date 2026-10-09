@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useView } from '@/editor/editorStore'
 import { useLanguage } from '@/i18n/i18n'
 import { EditPanel } from './EditPanel'
+import { SettingsDialog } from './SettingsDialog'
 import { Toolbar } from './Toolbar'
 
 describe('language setting', () => {
@@ -26,6 +28,13 @@ describe('language setting', () => {
     fireEvent.click(screen.getByRole('radio', { name: '繁體中文' }))
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     expect(screen.getByRole('tab', { name: '光線' })).toBeInTheDocument()
+  })
+
+  it('toggles the histogram', () => {
+    render(<SettingsDialog open onOpenChange={() => {}} />)
+    const before = useView.getState().showHistogram
+    fireEvent.click(screen.getByRole('switch', { name: '直方圖' }))
+    expect(useView.getState().showHistogram).toBe(!before)
   })
 
   it('remembers the choice', () => {

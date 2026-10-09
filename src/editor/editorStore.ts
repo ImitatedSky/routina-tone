@@ -129,8 +129,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 }))
 
+// 調色（和 Lightroom 一樣的編修）或工具（像素畫這類非調色的功能，拿調好色的畫面再加工）
+export type Workspace = 'develop' | 'tools'
+export type Tool = 'pixel'
+
 // 只是畫面狀態，不進 undo 歷史
 interface ViewState {
+  workspace: Workspace
+  // 工具頁裡打開的工具；null = 工具清單
+  tool: Tool | null
   // 按住比較時顯示原圖
   showOriginal: boolean
   showHistogram: boolean
@@ -150,6 +157,8 @@ interface ViewState {
   // 收起下方（桌機是右側）的操作面板，讓照片佔滿畫面
   panelCollapsed: boolean
   setPanelCollapsed: (value: boolean) => void
+  setWorkspace: (value: Workspace) => void
+  setTool: (value: Tool | null) => void
   setShowOriginal: (value: boolean) => void
   setBrush: (patch: Partial<{ brushSize: number; brushFeather: number; brushErase: boolean }>) => void
   setMaskMode: (value: boolean) => void
@@ -162,6 +171,8 @@ interface ViewState {
 }
 
 export const useView = create<ViewState>((set) => ({
+  workspace: 'develop',
+  tool: null,
   showOriginal: false,
   showHistogram: true,
   histogram: null,
@@ -175,6 +186,8 @@ export const useView = create<ViewState>((set) => ({
   brushErase: false,
   panelCollapsed: false,
   setPanelCollapsed: (panelCollapsed) => set({ panelCollapsed }),
+  setWorkspace: (workspace) => set({ workspace }),
+  setTool: (tool) => set({ tool }),
   setShowOriginal: (showOriginal) => set({ showOriginal }),
   setBrush: (patch) => set(patch),
   setMaskMode: (maskMode) => set({ maskMode }),

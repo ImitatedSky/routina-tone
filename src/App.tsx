@@ -5,7 +5,8 @@ import { EmptyState } from '@/components/editor/EmptyState'
 import { PanelToggle } from '@/components/editor/PanelToggle'
 import { PhotoCanvas } from '@/components/editor/PhotoCanvas'
 import { Toolbar } from '@/components/editor/Toolbar'
-import { useEditor } from '@/editor/editorStore'
+import { ToolsPanel } from '@/components/tools/ToolsPanel'
+import { useEditor, useView } from '@/editor/editorStore'
 import { openPhotoFile } from '@/editor/openPhoto'
 import { useSessionPersistence } from '@/editor/useSessionPersistence'
 import { useShortcuts } from '@/editor/useShortcuts'
@@ -13,6 +14,7 @@ import { useLanguage, useT } from '@/i18n/i18n'
 
 export function App() {
   const hasPhoto = useEditor((s) => s.photo !== null)
+  const tools = useView((s) => s.workspace === 'tools')
   const restoring = useSessionPersistence()
   useShortcuts()
   const locale = useLanguage((s) => s.locale)
@@ -40,6 +42,7 @@ export function App() {
           <PhotoCanvas />
           <PanelToggle />
           <EditPanel />
+          {tools && <ToolsPanel />}
         </main>
       ) : (
         !restoring && <EmptyState />

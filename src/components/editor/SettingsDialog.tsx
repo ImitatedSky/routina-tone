@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useView } from '@/editor/editorStore'
 import { useLanguage, useT, type LanguagePref } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +14,8 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const t = useT()
   const pref = useLanguage((s) => s.pref)
   const setPref = useLanguage((s) => s.setPref)
+  const showHistogram = useView((s) => s.showHistogram)
+  const toggleHistogram = useView((s) => s.toggleHistogram)
 
   const options: { value: LanguagePref; label: string }[] = [
     { value: 'system', label: t.editor.settings.system },
@@ -47,6 +50,31 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 {pref === o.value && <Check className="size-4" />}
               </button>
             ))}
+          </div>
+        </section>
+        {/* 手機的工具列放不下直方圖按鈕，在這裡開關 */}
+        <section>
+          <h3 className="mb-2 text-xs text-muted-foreground">{t.editor.settings.display}</h3>
+          <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm pointer-coarse:py-3">
+            {t.editor.settings.histogram}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showHistogram}
+              aria-label={t.editor.settings.histogram}
+              onClick={toggleHistogram}
+              className={cn(
+                'relative h-6 w-11 shrink-0 rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                showHistogram ? 'bg-primary' : 'bg-muted',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 left-0.5 size-5 rounded-full bg-foreground transition-transform',
+                  showHistogram && 'translate-x-5 bg-primary-foreground',
+                )}
+              />
+            </button>
           </div>
         </section>
       </DialogContent>

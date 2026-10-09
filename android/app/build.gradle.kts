@@ -53,8 +53,8 @@ android {
         applicationId = "com.routina.tone"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 16
-        versionName = "0.13.0"
+        versionCode = 17
+        versionName = "1.0.0"
     }
 
     sourceSets["main"].assets.srcDir(webAssetsDir)
